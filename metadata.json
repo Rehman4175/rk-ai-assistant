@@ -1,0 +1,6 @@
+{
+  "name": "RK AI Assistant",
+  "description": "Premium Jarvis-like AI assistant with tasks, habits, expenses, notes, calendar, diary, water logging, memory, security lock, OCR and voice commands.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
