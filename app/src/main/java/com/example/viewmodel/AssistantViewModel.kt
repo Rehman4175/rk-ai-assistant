@@ -773,6 +773,41 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private fun generateDataContext(): String {
+        val today = getTodayDateString()
+        val currentMonth = today.take(7)
+        
+        // Expenses
+        val monthExpenses = expenses.value.filter { it.dateString.startsWith(currentMonth) && !it.isIncome }
+        val totalSpend = monthExpenses.sumOf { it.amount }
+        val topCategory = monthExpenses.groupBy { it.category }.maxByOrNull { it.value.sumOf { e -> e.amount } }?.key ?: "None"
+        
+        // Tasks
+        val allTasks = tasks.value
+        val completed = allTasks.count { it.isCompleted }
+        val pending = allTasks.size - completed
+        val completionRate = if (allTasks.isNotEmpty()) (completed * 100 / allTasks.size) else 0
+        
+        // Habits
+        val habitStreaks = habits.value.joinToString { "${it.name}: ${it.streakCount} days" }
+        
+        // Bills
+        val pendingBills = bills.value.count { !it.paidMonthsCommaSeparated.contains(currentMonth) }
+        
+        // Water
+        val waterIntake = todayWaterSum.value
+        val waterGoal = prefs.getWaterGoal()
+
+        return """
+            [USER DATA SUMMARY - $today]
+            - Expenses this month: Rs $totalSpend (Top category: $topCategory)
+            - Task Stats: $pending pending, $completed completed ($completionRate% completion rate)
+            - Habit Streaks: $habitStreaks
+            - Bills pending this month: $pendingBills
+            - Water today: ${waterIntake}ml / ${waterGoal}ml
+        """.trimIndent()
+    }
+
     // ============================================================
     // MAIN AI ASSISTANT — Chat + Smart Command Parsing
     // ============================================================
@@ -805,16 +840,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
-            // Full conversational AI response
+            // Full conversational AI response with Data Context
+            val dataContext = generateDataContext()
             val allMemoryFacts = memories.value.joinToString("\n") { "- ${it.category}: ${it.content}" }
-            val todayTasks = tasks.value.filter { !it.isCompleted }.take(5).joinToString(", ") { it.title }
             val systemContext = """
                 You are RK, a smart personal AI assistant. Introduce yourself as "Main RK, aapka personal voice assistant hoon".
-                Be very helpful, polite, and answer ANY question the user asks. 
-                If you are online, use your full intelligence. If the user asks about privacy, reassure them that data stays on their device and backup is secure to Google Sheets.
+                You have access to the user's data summarized below. Answer their questions accurately based on this data.
+                If they ask about their habits, spending, or tasks, use the provided numbers to give insights.
+                
+                $dataContext
                 
                 Today's date: ${getTodayDateString()}
-                User's active tasks: $todayTasks
                 Personal memories: $allMemoryFacts
                 
                 You help with: tasks, reminders, expenses, notes, habits, water tracking, calendar, diary.
@@ -833,7 +869,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 ) ?: (if (isLocalAiAvailable.value) LocalLLMService.generateResponse(userPrompt, getApplication()) else null)
             } else if (isLocalAiAvailable.value) {
-                LocalLLMService.generateResponse("System: You are RK AI. User asks: $userPrompt", getApplication())
+                LocalLLMService.generateResponse("System: $systemContext\nUser asks: $userPrompt", getApplication())
             } else {
                 "Assalamualaikum! Main RK hoon. Abhi internet offline hai aur local model bhi nahi mila. Please model download karein ya internet on karein."
             }
