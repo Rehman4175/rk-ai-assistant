@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -414,34 +415,43 @@ class DailyBriefingWorker(val context: Context, workerParams: WorkerParameters) 
 // BROADCAST RECEIVER for complete reminder action & boot reschedule
 class SmartReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val pendingResult = goAsync()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val reminderId = intent.getIntExtra("REMINDER_ID", -1)
 
-        if (intent.action == "COMPLETE_REMINDER") {
-            if (reminderId != -1) {
-                notificationManager.cancel(reminderId)
-                val db = AppDatabase.getDatabase(context)
-                CoroutineScope(Dispatchers.IO).launch {
-                    val reminder = db.reminderDao().getReminderById(reminderId)
-                    if (reminder != null) {
-                        db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (intent.action == "COMPLETE_REMINDER") {
+                    if (reminderId != -1) {
+                        notificationManager.cancel(reminderId)
+                        val db = AppDatabase.getDatabase(context)
+                        val reminder = db.reminderDao().getReminderById(reminderId)
+                        if (reminder != null) {
+                            db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
+                        }
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Reminder completed.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else if (intent.action == "SNOOZE_REMINDER") {
+                    if (reminderId != -1) {
+                        notificationManager.cancel(reminderId)
+                        val db = AppDatabase.getDatabase(context)
+                        val reminder = db.reminderDao().getReminderById(reminderId)
+                        if (reminder != null) {
+                            // Reschedule by 10 minutes and reset acknowledged flag
+                            val newTime = System.currentTimeMillis() + (10 * 60 * 1000L)
+                            db.reminderDao().updateReminder(reminder.copy(dueDateTime = newTime, isAcknowledged = false))
+                        }
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Snoozed for 10 minutes.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
-                Toast.makeText(context, "Reminder completed.", Toast.LENGTH_SHORT).show()
-            }
-        } else if (intent.action == "SNOOZE_REMINDER") {
-            if (reminderId != -1) {
-                notificationManager.cancel(reminderId)
-                val db = AppDatabase.getDatabase(context)
-                CoroutineScope(Dispatchers.IO).launch {
-                    val reminder = db.reminderDao().getReminderById(reminderId)
-                    if (reminder != null) {
-                        // Reschedule by 10 minutes and reset acknowledged flag
-                        val newTime = System.currentTimeMillis() + (10 * 60 * 1000L)
-                        db.reminderDao().updateReminder(reminder.copy(dueDateTime = newTime, isAcknowledged = false))
-                    }
-                }
-                Toast.makeText(context, "Snoozed for 10 minutes.", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                pendingResult.finish()
             }
         }
     }
