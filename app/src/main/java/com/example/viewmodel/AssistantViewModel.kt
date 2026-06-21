@@ -187,7 +187,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun updateWeather() {
         // OpenWeatherMap API Key from BuildConfig
         val weatherKey = try { BuildConfig.WEATHER_API_KEY } catch (e: Exception) { "" }
-        if (weatherKey.isBlank()) return
+        if (weatherKey.isBlank()) {
+            weatherTerminal.value = "Weather Key Missing"
+            return
+        }
         
         var lat = 19.0760 // Default Mumbai
         var lon = 72.8777
