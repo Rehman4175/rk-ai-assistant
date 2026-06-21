@@ -38,7 +38,10 @@ fun scheduleAllWorkers(context: Context) {
     // 3. Schedule Budget Alert Worker (Daily 9 AM)
     scheduleBudgetAlert(context)
 
-    // 4. Periodic Sync Worker (Every 1 hour)
+    // 4. Schedule Daily Briefing Worker (Daily 8 AM)
+    scheduleDailyBriefing(context)
+
+    // 5. Periodic Sync Worker (Every 1 hour)
     val syncRequest = PeriodicWorkRequestBuilder<GoogleSheetSyncWorker>(1, TimeUnit.HOURS)
         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
         .build()
@@ -89,6 +92,28 @@ fun scheduleBudgetAlert(context: Context) {
         .build()
     WorkManager.getInstance(context).enqueueUniqueWork(
         "BudgetAlertWorker",
+        ExistingWorkPolicy.REPLACE,
+        request
+    )
+}
+
+fun scheduleDailyBriefing(context: Context) {
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 8)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    if (target.before(now)) {
+        target.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    val delayMs = target.timeInMillis - now.timeInMillis
+    val request = OneTimeWorkRequestBuilder<DailyBriefingWorker>()
+        .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "DailyBriefingWorker",
         ExistingWorkPolicy.REPLACE,
         request
     )
@@ -203,6 +228,22 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
                     pendingComplete
                 ).build()
 
+                val snoozeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
+                    action = "SNOOZE_REMINDER"
+                    putExtra("REMINDER_ID", reminder.id)
+                }
+                val pendingSnooze = PendingIntent.getBroadcast(
+                    context,
+                    reminder.id + 10000, // Unique ID
+                    snoozeIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val snoozeAction = NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_lock_idle_alarm,
+                    "Snooze 10m",
+                    pendingSnooze
+                ).build()
+
                 sendAndroidNotification(
                     context = context,
                     id = reminder.id,
@@ -210,7 +251,7 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
                     channelName = "Reminders",
                     title = "🔔 Reminder: " + reminder.title,
                     text = "It's time for: ${reminder.title}",
-                    actions = listOf(completeAction)
+                    actions = listOf(completeAction, snoozeAction)
                 )
 
                 // Mark as acknowledged so it doesn't fire again immediately
@@ -319,29 +360,88 @@ class BudgetAlertWorker(val context: Context, workerParams: WorkerParameters) : 
     }
 }
 
+// WORKER 4: Daily Briefing (Daily 8 AM)
+class DailyBriefingWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+    override suspend fun doWork(): Result {
+        val db = AppDatabase.getDatabase(context)
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        
+        // 1. Get stats
+        val pendingTasks = db.taskDao().getAllTasks().first().filter { !it.isCompleted }
+        val allBills = db.billDao().getAllBills().first()
+        val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        val currentMonth = today.take(7)
+        
+        val dueBills = allBills.filter { bill ->
+            val paidMonths = bill.paidMonthsCommaSeparated.split(",").filter { it.isNotBlank() }
+            !paidMonths.contains(currentMonth) && (bill.dueDayOfMonth - dayOfMonth in 0..2)
+        }
+        
+        val waterIntake = db.waterLogDao().getWaterSumByDay(today).first() ?: 0
+        val waterGoal = SecurePrefHelper(context).getWaterGoal()
+
+        // 2. Prepare context for Gemini
+        val briefingContext = """
+            Tasks pending: ${pendingTasks.size} (${pendingTasks.take(3).joinToString { it.title }})
+            Bills due soon: ${dueBills.size}
+            Water today: ${waterIntake}ml / ${waterGoal}ml
+            Date: $today
+        """.trimIndent()
+
+        // 3. Get AI Briefing
+        val prompt = "Generate a short, energetic 'Jarvis-style' morning briefing in Hinglish based on this data: $briefingContext. Keep it under 40 words and mention the number of tasks."
+        val response = if (GeminiService.isApiKeyConfigured()) {
+            GeminiService.chat(prompt, "You are RK, a smart personal assistant.") ?: "Good morning Boss! Aapke ${pendingTasks.size} tasks pending hain, check kar lijiye."
+        } else {
+            "Good morning Boss! Aaj ${pendingTasks.size} tasks pending hain. Paani piyo aur kaam shuru karo!"
+        }
+
+        // 4. Notify
+        sendAndroidNotification(
+            context = context,
+            id = 9993,
+            channelId = "daily_briefing_channel",
+            channelName = "Daily Briefings",
+            title = "🌅 Good Morning Boss!",
+            text = response
+        )
+
+        scheduleDailyBriefing(context)
+        return Result.success()
+    }
+}
+
 // BROADCAST RECEIVER for complete reminder action & boot reschedule
 class SmartReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == "COMPLETE_REMINDER") {
-            val reminderId = intent.getIntExtra("REMINDER_ID", -1)
-            if (reminderId != -1) {
-                // Cancel notification
-                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                notificationManager.cancel(reminderId)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val reminderId = intent.getIntExtra("REMINDER_ID", -1)
 
-                // Update in DB inside thread/coroutine
+        if (intent.action == "COMPLETE_REMINDER") {
+            if (reminderId != -1) {
+                notificationManager.cancel(reminderId)
                 val db = AppDatabase.getDatabase(context)
                 CoroutineScope(Dispatchers.IO).launch {
                     val reminder = db.reminderDao().getReminderById(reminderId)
                     if (reminder != null) {
                         db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
                     }
-                    val smartReminder = db.smartReminderDao().getById(reminderId)
-                    if (smartReminder != null) {
-                        db.smartReminderDao().updateSmartReminder(smartReminder.copy(isAcknowledged = true))
+                }
+                Toast.makeText(context, "Reminder completed.", Toast.LENGTH_SHORT).show()
+            }
+        } else if (intent.action == "SNOOZE_REMINDER") {
+            if (reminderId != -1) {
+                notificationManager.cancel(reminderId)
+                val db = AppDatabase.getDatabase(context)
+                CoroutineScope(Dispatchers.IO).launch {
+                    val reminder = db.reminderDao().getReminderById(reminderId)
+                    if (reminder != null) {
+                        // Reschedule by 10 minutes and reset acknowledged flag
+                        val newTime = System.currentTimeMillis() + (10 * 60 * 1000L)
+                        db.reminderDao().updateReminder(reminder.copy(dueDateTime = newTime, isAcknowledged = false))
                     }
                 }
-                Toast.makeText(context, "Smart Reminder completed and stopped.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Snoozed for 10 minutes.", Toast.LENGTH_SHORT).show()
             }
         }
     }

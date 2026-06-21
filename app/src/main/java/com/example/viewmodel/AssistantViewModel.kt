@@ -842,6 +842,47 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = finalResponse))
             aiIsGenerating.value = false
             speak(finalResponse)
+
+            // Extract memories in background
+            if (aiResponse != null) {
+                extractAndSaveMemories(userPrompt, finalResponse)
+            }
+        }
+    }
+
+    private fun extractAndSaveMemories(userText: String, aiResponse: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!GeminiService.isApiKeyConfigured() || !isNetworkAvailable()) return@launch
+            
+            val prompt = """
+                Identify if there are any NEW personal facts about the user in this interaction.
+                User: "$userText"
+                AI: "$aiResponse"
+                
+                If a clear personal preference, date, or fact is mentioned, extract it.
+                Return ONLY a JSON array of facts, e.g., ["User's daughter's name is Sara", "User is allergic to peanuts"].
+                If no new facts, return exactly [].
+            """.trimIndent()
+            
+            try {
+                val result = GeminiService.chat(prompt, "You are a silent memory extractor. Output ONLY valid JSON array.")
+                if (result != null) {
+                    val cleaned = result.substringAfter("[").substringBeforeLast("]").trim()
+                    if (cleaned.isNotEmpty()) {
+                        val fullJson = "[$cleaned]"
+                        val array = JSONArray(fullJson)
+                        for (i in 0 until array.length()) {
+                            val fact = array.getString(i)
+                            // Avoid duplicates (simple check)
+                            if (memories.value.none { it.content.contains(fact, ignoreCase = true) }) {
+                                repository.insertMemory(PersonalMemory(content = fact, category = "AI Memory"))
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -1327,6 +1368,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 val text = GeminiService.transcribeAudio(base64Str, mime)
                 repository.updateVoiceNote(voiceNote.copy(transcription = text, isTranscribed = true, status = "Success"))
                 speak("Transcription complete.")
+                
+                // Auto-detect if this is a command (Task/Expense/Reminder)
+                val autoResult = trySmartAiParsing(text)
+                if (autoResult != null) {
+                    speak("I've also $autoResult")
+                    repository.insertChatMessage(ChatMessage(
+                        chatSessionId = currentChatSessionId.value,
+                        sender = "Rk",
+                        text = "Voice Note processed: $autoResult"
+                    ))
+                }
             } catch (e: Exception) {
                 repository.updateVoiceNote(voiceNote.copy(transcription = "Error: ${e.localizedMessage}", status = "Error"))
             }

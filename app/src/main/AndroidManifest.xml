@@ -74,6 +74,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="COMPLETE_REMINDER" />
+                <action android:name="SNOOZE_REMINDER" />
             </intent-filter>
         </receiver>
 
