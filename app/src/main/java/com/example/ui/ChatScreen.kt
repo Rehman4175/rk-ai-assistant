@@ -115,7 +115,7 @@ fun ChatScreen(viewModel: AssistantViewModel) {
                         tint = SoftTextGray
                     )
                 }
-                IconButton(onClick = { viewModel.textToSpeechEnabled.value = !ttsEnabled }) {
+                IconButton(onClick = { viewModel.toggleTextToSpeech() }) {
                     Icon(
                         imageVector = if (ttsEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
                         contentDescription = stringResource(R.string.chat_voice_toggle_desc),

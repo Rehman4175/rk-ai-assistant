@@ -1,28 +1,38 @@
 package com.example.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.rememberAsyncImagePainter
+import com.example.data.PrivateSpaceItem
 import com.example.viewmodel.AssistantViewModel
 import com.example.ui.theme.*
+import com.example.viewmodel.AppScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,11 +43,21 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
     val error by viewModel.privateSpaceError.collectAsStateWithLifecycle()
 
     var showDialog by remember { mutableStateOf(false) }
+    var editingItem by remember { mutableStateOf<PrivateSpaceItem?>(null) }
+    
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Diary") }
+    var category by remember { mutableStateOf("Personal") }
+    var photoPath by remember { mutableStateOf("") }
 
     var passwordInput by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { photoPath = it.toString() }
+    }
 
     if (isLocked) {
         Box(
@@ -50,21 +70,33 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(32.dp)
             ) {
-                Icon(Icons.Default.Lock, null, tint = NeonPurple, modifier = Modifier.size(64.dp))
+                Surface(
+                    modifier = Modifier.size(80.dp),
+                    shape = CircleShape,
+                    color = NeonPurple.copy(alpha = 0.1f)
+                ) {
+                    Icon(
+                        Icons.Default.Lock, 
+                        null, 
+                        tint = NeonPurple, 
+                        modifier = Modifier.padding(20.dp).size(40.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = if (hasPassword) "PRIVATE SPACE LOCKED" else "SET PRIVATE PASSWORD",
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (hasPassword) "Enter password to access your private diary and notes." else "Create a password to secure your private diary.",
+                    text = if (hasPassword) "Enter password to access your encrypted vault." else "Create a password to secure your sensitive data.",
                     color = SoftTextGray,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
                 OutlinedTextField(
                     value = passwordInput,
@@ -75,8 +107,10 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                         focusedBorderColor = NeonPurple,
                         unfocusedBorderColor = BorderColor,
                         focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        unfocusedTextColor = Color.White,
+                        cursorColor = NeonPurple
                     ),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -84,7 +118,7 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                     Text(text = error!!, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
                 Button(
                     onClick = {
@@ -96,21 +130,33 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                         passwordInput = ""
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonPurple),
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
-                    Text(if (hasPassword) "UNLOCK" else "SET PASSWORD", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text(if (hasPassword) "UNLOCK VAULT" else "INITIALIZE VAULT", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
         }
         return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SlateDarkBackground)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        containerColor = SlateDarkBackground,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { 
+                    viewModel.editingPrivateItem.value = null
+                    viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
+                },
+                containerColor = NeonPurple,
+                contentColor = Color.Black
+            ) {
+                Icon(Icons.Default.Add, "Add Note")
+            }
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -120,76 +166,58 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { viewModel.lockPrivateSpace() }) {
-                        Icon(Icons.Default.Lock, "Lock", tint = NeonPurple)
+                        Icon(Icons.Default.LockOpen, "Lock", tint = NeonPurple)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "PRIVATE SPACE",
-                        fontSize = 22.sp,
+                        text = "Private Vault",
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = NeonPurple
+                        color = Color.White
                     )
-                }
-
-                IconButton(
-                    onClick = { showDialog = true },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(NeonPurple.copy(alpha = 0.2f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Add, null, tint = NeonPurple)
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(bottom = 90.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            // Staggered Grid for Note-like layout
+            val filteredList = itemsList.filter { !it.isDeleted }
+            val pinnedItems = filteredList.filter { it.isPinned }
+            val otherItems = filteredList.filter { !it.isPinned }
+
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                contentPadding = PaddingValues(bottom = 80.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalItemSpacing = 8.dp
             ) {
-                if (itemsList.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Vault is empty. Secure your sensitive data.",
-                                color = SoftTextGray,
-                                fontSize = 14.sp
-                            )
+                if (pinnedItems.isNotEmpty()) {
+                    item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Text("PINNED", color = SoftTextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                    }
+                    items(pinnedItems) { item ->
+                        PrivateItemCard(item, viewModel) {
+                            viewModel.editingPrivateItem.value = item
+                            viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
                         }
+                    }
+                    item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Text("OTHERS", color = SoftTextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
                     }
                 }
 
-                items(itemsList) { item ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(CardBackgroundGlass)
-                            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Lock, null, tint = NeonPurple, modifier = Modifier.size(24.dp))
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(text = item.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Text(text = "Category: ${item.category} • Modified: ${item.modifiedAt}", fontSize = 11.sp, color = SoftTextGray)
-                                }
-                            }
-                            IconButton(onClick = { viewModel.deletePrivateSpaceItem(item) }) {
-                                Icon(Icons.Default.Delete, null, tint = SoftTextGray)
+                items(otherItems) { item ->
+                    PrivateItemCard(item, viewModel) {
+                        viewModel.editingPrivateItem.value = item
+                        viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
+                    }
+                }
+
+                if (itemsList.isEmpty()) {
+                    item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 100.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Notes, null, tint = SoftTextGray.copy(alpha = 0.3f), modifier = Modifier.size(64.dp))
+                                Text("Your secret notes appear here", color = SoftTextGray, fontSize = 14.sp)
                             }
                         }
                     }
@@ -200,15 +228,27 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                containerColor = CardBackgroundGlass,
+                containerColor = Color(0xFF1A1C2E),
                 modifier = Modifier.border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
-                title = { Text("ENCRYPT NEW DATA", color = NeonPurple, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (editingItem == null) "NEW SECRET" else "EDIT SECRET", color = NeonPurple, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        if (editingItem != null) {
+                            IconButton(onClick = { 
+                                viewModel.deletePrivateSpaceItem(editingItem!!)
+                                showDialog = false 
+                            }) {
+                                Icon(Icons.Default.Delete, "Delete", tint = Color.Red.copy(alpha = 0.7f))
+                            }
+                        }
+                    }
+                },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             value = title,
                             onValueChange = { title = it },
-                            label = { Text("Title", color = SoftTextGray) },
+                            placeholder = { Text("Title", color = SoftTextGray) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonPurple,
                                 unfocusedBorderColor = BorderColor,
@@ -220,7 +260,8 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                         OutlinedTextField(
                             value = content,
                             onValueChange = { content = it },
-                            label = { Text("Sensitive Content", color = SoftTextGray) },
+                            placeholder = { Text("Write something private...", color = SoftTextGray) },
+                            minLines = 3,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonPurple,
                                 unfocusedBorderColor = BorderColor,
@@ -229,10 +270,32 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { photoPickerLauncher.launch("image/*") }) {
+                                Icon(Icons.Default.Image, "Add Photo", tint = NeonCyan)
+                            }
+                            if (photoPath.isNotBlank()) {
+                                Text("Photo attached", color = NeonCyan, fontSize = 12.sp)
+                                IconButton(onClick = { photoPath = "" }) {
+                                    Icon(Icons.Default.Close, "Remove Photo", tint = Color.Red, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+
+                        if (photoPath.isNotBlank()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(photoPath),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxWidth().height(120.dp).clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
                         OutlinedTextField(
                             value = category,
                             onValueChange = { category = it },
-                            label = { Text("Category (Pass/Note/Bank)", color = SoftTextGray) },
+                            label = { Text("Category", color = SoftTextGray) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonPurple,
                                 unfocusedBorderColor = BorderColor,
@@ -246,16 +309,20 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (title.isNotBlank()) {
-                                viewModel.addPrivateSpaceItem(title, content, category)
-                                title = ""
-                                content = ""
+                            if (title.isNotBlank() || content.isNotBlank()) {
+                                if (editingItem == null) {
+                                    viewModel.addPrivateSpaceItem(title, content, category, photoPath)
+                                } else {
+                                    // Normally we'd update, but let's just delete and re-add for simplicity or add an update function
+                                    viewModel.deletePrivateSpaceItem(editingItem!!)
+                                    viewModel.addPrivateSpaceItem(title, content, category, photoPath)
+                                }
                                 showDialog = false
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
                     ) {
-                        Text("ENCRYPT & SAVE", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("SAVE ENCRYPTED", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
@@ -264,6 +331,75 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun PrivateItemCard(item: PrivateSpaceItem, viewModel: AssistantViewModel, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardBackgroundGlass)
+            .border(1.dp, if (item.isPinned) NeonPurple else BorderColor, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(12.dp)
+    ) {
+        Column {
+            if (item.photoPath.isNotBlank()) {
+                Image(
+                    painter = rememberAsyncImagePainter(item.photoPath),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .padding(bottom = 8.dp),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = item.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (item.isPinned) Icons.Default.PushPin else Icons.Default.PushPin,
+                    contentDescription = "Pin",
+                    tint = if (item.isPinned) NeonPurple else SoftTextGray.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp).clickable { viewModel.togglePrivateSpaceItemPin(item) }
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = item.content,
+                fontSize = 13.sp,
+                color = SoftTextGray,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(NeonPurple.copy(alpha = 0.1f))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(text = item.category, fontSize = 9.sp, color = NeonPurple, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

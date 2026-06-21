@@ -14,13 +14,14 @@ android {
     applicationId = "com.aistudio.rkaiassistant.fptwyz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "1.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    // ✅ FIX: Added BuildConfig field for Gemini API Key
-    buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
+    // ✅ FIX: Added BuildConfig field for Gemini API Key - checking both properties and environment
+    val apiKey: String = (project.findProperty("GEMINI_API_KEY") ?: System.getenv("GEMINI_API_KEY") ?: "").toString()
+    buildConfigField("String", "GEMINI_API_KEY", "\"$apiKey\"")
   }
 
   signingConfigs {
@@ -74,6 +75,8 @@ dependencies {
 
   // Core Android
   implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.biometric)
+  implementation(libs.mediapipe.tasks.genai)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.viewmodel.compose)

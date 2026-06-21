@@ -58,14 +58,14 @@ interface GeminiApi {
     ): retrofit2.Response<GeminiResponse>  // ✅ FIX: Using Response wrapper for proper error handling
 }
 
-interface GoogleSheetsApi {
-    @POST("macros/s/AKfycbyq87pD_jX85O-8qY-Yp9pP_9qP-9qP_9qP/exec")
-    suspend fun syncData(@Body data: String): okhttp3.ResponseBody
-}
-
 interface WeatherApi {
-    @retrofit2.http.GET("data/2.1/forecast/city")
-    suspend fun getWeather(@Query("lat") lat: Double, @Query("lon") lon: Double, @Query("appid") key: String): okhttp3.ResponseBody
+    @retrofit2.http.GET("data/2.5/weather")
+    suspend fun getWeather(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("appid") apiKey: String,
+        @Query("units") units: String = "metric"
+    ): retrofit2.Response<okhttp3.ResponseBody>
 }
 
 // ===== SERVICE OBJECTS =====
@@ -90,6 +90,11 @@ object GeminiService {
         .build()
 
     private val geminiApi = retrofit.create(GeminiApi::class.java)
+    private val weatherRetrofit = Retrofit.Builder()
+        .baseUrl("https://api.openweathermap.org/")
+        .client(okHttpClient)
+        .build()
+    private val weatherApi = weatherRetrofit.create(WeatherApi::class.java)
 
     // ✅ FIX: Better API key check
     fun isApiKeyConfigured(): Boolean {
@@ -132,16 +137,16 @@ object GeminiService {
                 }
                 response.code() == 429 -> {
                     // ✅ FIX: Better 429 error message with retry suggestion
-                    null
+                    "Maaf kijiyega Boss, API limit khatam ho gayi hai. Thodi der baad try karein (429 Error)."
                 }
                 response.code() == 401 || response.code() == 403 -> {
-                    null
+                    "API Key sahi nahi hai ya expire ho gayi hai (401/403 Error)."
                 }
                 response.code() == 500 || response.code() == 503 -> {
-                    null
+                    "Google ke servers mein kuch takleef hai, thodi der mein theek ho jayega (500/503 Error)."
                 }
                 else -> {
-                    null
+                    "Kuch anjaan error aaya hai (Code: ${response.code()})."
                 }
             }
         } catch (e: UnknownHostException) {
@@ -255,6 +260,28 @@ object GeminiService {
     /**
      * ✅ FIX: Improved smart parsing
      */
+    /**
+     * ✅ FIX: Real-time Weather Integration
+     */
+    suspend fun fetchWeather(lat: Double, lon: Double, apiKey: String): String {
+        return try {
+            val response = weatherApi.getWeather(lat, lon, apiKey)
+            if (response.isSuccessful) {
+                val body = response.body()?.string() ?: ""
+                val json = org.json.JSONObject(body)
+                val main = json.getJSONObject("main")
+                val temp = main.getDouble("temp").toInt()
+                val weatherArray = json.getJSONArray("weather")
+                val desc = if (weatherArray.length() > 0) weatherArray.getJSONObject(0).getString("description") else "Clear"
+                "$temp°C - ${desc.replaceFirstChar { it.uppercase() }}"
+            } else {
+                "Weather unavailable"
+            }
+        } catch (e: Exception) {
+            "Weather Error"
+        }
+    }
+
     suspend fun parseNaturalLanguage(
         userInput: String,
         parseType: String // "task", "reminder", "expense", "event"
@@ -300,7 +327,11 @@ object GeminiService {
 object GoogleSheetsService {
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     suspend fun sync(jsonPayload: String, scriptUrl: String): Boolean {
@@ -309,19 +340,31 @@ object GoogleSheetsService {
                 val mediaType = "application/json".toMediaType()
                 val body = jsonPayload.toRequestBody(mediaType)
                 
-                // Use a URL that ensures we follow redirects and set a common User-Agent
+                // Google Apps Script usually requires following redirects correctly.
                 val request = okhttp3.Request.Builder()
                     .url(scriptUrl)
                     .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:100.0) Gecko/100.0 Firefox/100.0")
+                    .header("Accept", "application/json")
                     .post(body)
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
-                    // For Google Apps Script, a successful doPost usually returns 200 or 302
-                    response.isSuccessful || response.code == 302
+                    val responseBody = response.body?.string() ?: ""
+                    println("Sync Response Code: ${response.code}")
+                    println("Sync Response Body: $responseBody")
+                    
+                    // Google Apps Script success could be 200 or 302/301/307 (redirects)
+                    // With followRedirects(true), we expect 200 OK.
+                    // We also check if the body contains "Success" as defined in our GAS code.
+                    val isSuccess = response.isSuccessful || 
+                                    response.code in 300..308 || 
+                                    responseBody.contains("Success", ignoreCase = true)
+                    
+                    isSuccess
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                println("Sync Error: ${e.message}")
                 false
             }
         }

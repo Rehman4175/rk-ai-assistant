@@ -27,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RemindLink::class,
         PrivateSpaceItem::class
     ],
-    version = 3,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

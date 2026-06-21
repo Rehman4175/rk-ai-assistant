@@ -24,6 +24,14 @@ class SecurePrefHelper(context: Context) {
         prefs.edit().remove("secure_pin_hash").apply()
     }
 
+    fun isAppLockActive(): Boolean {
+        return prefs.getBoolean("settings_app_lock_active", false)
+    }
+
+    fun setAppLockActive(active: Boolean) {
+        prefs.edit().putBoolean("settings_app_lock_active", active).apply()
+    }
+
     fun isDarkTheme(): Boolean {
         return prefs.getBoolean("settings_dark_theme", true) // Default is dark theme
     }
@@ -62,6 +70,22 @@ class SecurePrefHelper(context: Context) {
 
     fun setGoogleScriptUrl(url: String) {
         prefs.edit().putString("google_script_url", url).apply()
+    }
+
+    fun setBatteryOptimizedPromptShown(shown: Boolean) {
+        prefs.edit().putBoolean("battery_opt_prompt_shown", shown).apply()
+    }
+
+    fun isBatteryOptimizedPromptShown(): Boolean {
+        return prefs.getBoolean("battery_opt_prompt_shown", false)
+    }
+
+    fun isBiometricEnabled(): Boolean {
+        return prefs.getBoolean("settings_biometric_enabled", true)
+    }
+
+    fun setBiometricEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("settings_biometric_enabled", enabled).apply()
     }
 
     // --- New Preferences ---

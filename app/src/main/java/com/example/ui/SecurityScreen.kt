@@ -1,5 +1,7 @@
 package com.example.ui
 
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,12 +9,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import com.example.data.BiometricHelper
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +35,24 @@ fun SecurityScreen(viewModel: AssistantViewModel) {
     var enteredPin by remember { mutableStateOf("") }
     val isPinSetup = !viewModel.prefs.isPinEnabled()
     val pinError by viewModel.pinError.collectAsState()
+    
+    val context = LocalContext.current
+    val biometricHelper = remember { BiometricHelper(context) }
+    val isBiometricAvailable = remember { biometricHelper.isBiometricAvailable() }
+    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
+
+    // Auto-trigger biometric if available and not in setup
+    LaunchedEffect(Unit) {
+        if (!isPinSetup && isBiometricAvailable && isBiometricEnabled) {
+            context.findFragmentActivity()?.let { activity ->
+                biometricHelper.showBiometricPrompt(
+                    activity = activity,
+                    onSuccess = { viewModel.unlockWithBiometric() },
+                    onError = { /* Handle error if needed */ }
+                )
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -41,7 +66,7 @@ fun SecurityScreen(viewModel: AssistantViewModel) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = java.util.concurrent.atomic.AtomicInteger(0).let { Arrangement.spacedBy(24.dp) },
+            verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
@@ -59,7 +84,7 @@ fun SecurityScreen(viewModel: AssistantViewModel) {
                 text = if (isPinSetup) {
                     "SETUP SECURITY PIN\nEnter a 4-digit security code to keep your data encrypted."
                 } else {
-                    "SECURE VAULT LOCKED\nEnter your 4-digit security code to authorize access."
+                    "RK ASSISTANT LOCKED\nEnter your 4-digit security code to authorize access."
                 },
                 fontSize = 14.sp,
                 color = SoftTextGray,
@@ -183,6 +208,14 @@ fun SecurityScreen(viewModel: AssistantViewModel) {
                                     // Set a default PIN
                                     viewModel.setOrUpdatePin("7777")
                                     enteredPin = ""
+                                } else if (isBiometricAvailable && isBiometricEnabled) {
+                                    context.findFragmentActivity()?.let { activity ->
+                                        biometricHelper.showBiometricPrompt(
+                                            activity = activity,
+                                            onSuccess = { viewModel.unlockWithBiometric() },
+                                            onError = { /* Handle error */ }
+                                        )
+                                    }
                                 } else {
                                     // Try master key or bypass for prototype ease of access
                                     if (enteredPin == "1234" || enteredPin.isEmpty()) {
@@ -194,13 +227,23 @@ fun SecurityScreen(viewModel: AssistantViewModel) {
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = if (isPinSetup) "SKIP" else "DEV",
-                            color = NeonCyan,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (!isPinSetup && isBiometricAvailable && isBiometricEnabled) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = "Biometric",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        } else {
+                            Text(
+                                text = if (isPinSetup) "SKIP" else "DEV",
+                                color = NeonCyan,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
+
                 }
             }
         }
@@ -229,4 +272,13 @@ fun PinButton(
             fontWeight = FontWeight.ExtraBold
         )
     }
+}
+
+fun Context.findFragmentActivity(): FragmentActivity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is FragmentActivity) return context
+        context = context.baseContext
+    }
+    return null
 }

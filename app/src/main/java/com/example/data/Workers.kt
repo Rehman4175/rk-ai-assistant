@@ -20,13 +20,15 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 fun scheduleAllWorkers(context: Context) {
-    // 1. Schedule Smart Reminder Worker to trigger in 1 minute
+    // 1. Schedule Smart Reminder Worker
+    // Note: PeriodicWorkRequest has a minimum interval of 15 minutes.
+    // We use a cascading OneTimeWorkRequest for "every minute" precision.
     val reminderRequest = OneTimeWorkRequestBuilder<ReminderWorker>()
-        .setInitialDelay(1, TimeUnit.MINUTES)
+        .setInitialDelay(30, TimeUnit.SECONDS)
         .build()
     WorkManager.getInstance(context).enqueueUniqueWork(
         "SmartReminderWorker",
-        ExistingWorkPolicy.KEEP,
+        ExistingWorkPolicy.REPLACE,
         reminderRequest
     )
 
@@ -97,17 +99,32 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     val prefs = SecurePrefHelper(context)
     val customTuneUri = prefs.getNotificationTune()
+    
+    // Dynamic channel ID based on sound to force updates
+    val finalChannelId = if (customTuneUri.isNotBlank()) {
+        "${channelId}_${customTuneUri.hashCode()}"
+    } else {
+        channelId
+    }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val channel = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+        val importance = NotificationManager.IMPORTANCE_HIGH
+        val channel = NotificationChannel(finalChannelId, channelName, importance).apply {
             description = "RK Assistant alerts"
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 250, 500)
+            setBypassDnd(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            
             if (customTuneUri.isNotBlank()) {
-                val soundUri = Uri.parse(customTuneUri)
-                val audioAttributes = android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-                setSound(soundUri, audioAttributes)
+                try {
+                    val soundUri = Uri.parse(customTuneUri)
+                    val audioAttributes = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    setSound(soundUri, audioAttributes)
+                } catch (e: Exception) {}
             }
         }
         notificationManager.createNotificationChannel(channel)
@@ -121,13 +138,18 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+    val builder = NotificationCompat.Builder(context, finalChannelId)
+        .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
         .setContentTitle(title)
         .setContentText(text)
         .setAutoCancel(true)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
         .setContentIntent(contentPI)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setPriority(NotificationCompat.PRIORITY_MAX)
+        .setCategory(NotificationCompat.CATEGORY_ALARM)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setOngoing(false)
+        .setFullScreenIntent(contentPI, true)
     
     if (customTuneUri.isNotBlank()) {
         builder.setSound(Uri.parse(customTuneUri))
@@ -137,7 +159,8 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
 
     actions.forEach { builder.addAction(it) }
 
-    notificationManager.notify(id, builder.build())
+    val notification = builder.build()
+    notificationManager.notify(id, notification)
 }
 
 // WORKER: Google Sheet Sync Worker
@@ -147,28 +170,22 @@ class GoogleSheetSyncWorker(val context: Context, workerParams: WorkerParameters
         val scriptUrl = prefs.getGoogleScriptUrl()
         if (scriptUrl.isBlank()) return Result.failure()
 
-        // This worker is intended to be triggered when internet is available
-        // It's better to have a dedicated sync method in a repository that can be called from here
-        // For simplicity, we can use a broadcast or a shared sync logic.
-        // Since AssistantViewModel has the sync logic, we might need to move it to a shared place.
-        // Actually, AssistantViewModel already calls syncToGoogleSheets.
+        val db = AppDatabase.getDatabase(context)
+        val success = SyncHelper.performSync(db, scriptUrl)
         
-        // We'll skip implementation here and assume immediateSync in ViewModel handles it for now,
-        // or we could implement a basic version if needed.
-        
-        return Result.success()
+        return if (success) Result.success() else Result.retry()
     }
 }
 
-// WORKER 1: Smart Reminder checking (cascades self every 1 min)
+// WORKER 1: Smart Reminder checking (cascades self every 15-30 seconds for better precision)
 class ReminderWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result {
         val db = AppDatabase.getDatabase(context)
-        val activeReminders = db.smartReminderDao().getActiveList()
+        val activeReminders = db.reminderDao().getAllRemindersList() // Check all reminders
         val now = System.currentTimeMillis()
 
         activeReminders.forEach { reminder ->
-            if (now >= reminder.dueDateTime) {
+            if (!reminder.isAcknowledged && !reminder.isDeleted && now >= reminder.dueDateTime) {
                 // Send rich notification
                 val completeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
                     action = "COMPLETE_REMINDER"
@@ -182,35 +199,28 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
                 )
                 val completeAction = NotificationCompat.Action.Builder(
                     android.R.drawable.ic_menu_save,
-                    "Complete - Stop Reminding",
+                    "Acknowledge",
                     pendingComplete
                 ).build()
 
                 sendAndroidNotification(
                     context = context,
                     id = reminder.id,
-                    channelId = "smart_reminders_channel",
-                    channelName = "Smart Reminders",
-                    title = "🚨 " + reminder.priority + " Reminder: " + reminder.title,
-                    text = "Awaiting acknowledgment. This reminder will re-alert periodically.",
+                    channelId = "reminders_channel",
+                    channelName = "Reminders",
+                    title = "🔔 Reminder: " + reminder.title,
+                    text = "It's time for: ${reminder.title}",
                     actions = listOf(completeAction)
                 )
 
-                // Reschedule details
-                val nextCount = reminder.currentRepeat + 1
-                if (nextCount >= reminder.maxRepeats) {
-                    // Turn off
-                    db.smartReminderDao().updateSmartReminder(reminder.copy(isAcknowledged = true, currentRepeat = nextCount))
-                } else {
-                    val nextDue = now + (reminder.repeatIntervalMinutes * 60 * 1000L)
-                    db.smartReminderDao().updateSmartReminder(reminder.copy(dueDateTime = nextDue, currentRepeat = nextCount))
-                }
+                // Mark as acknowledged so it doesn't fire again immediately
+                db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
             }
         }
 
-        // Reschedule work execution in 1 minute
+        // Reschedule work execution in 30 seconds for higher precision
         val reminderRequest = OneTimeWorkRequestBuilder<ReminderWorker>()
-            .setInitialDelay(1, TimeUnit.MINUTES)
+            .setInitialDelay(30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             "SmartReminderWorker",
@@ -322,16 +332,17 @@ class SmartReminderReceiver : BroadcastReceiver() {
                 // Update in DB inside thread/coroutine
                 val db = AppDatabase.getDatabase(context)
                 CoroutineScope(Dispatchers.IO).launch {
-                    val activeList = db.smartReminderDao().getActiveList()
-                    val match = activeList.find { it.id == reminderId }
-                    if (match != null) {
-                        db.smartReminderDao().updateSmartReminder(match.copy(isAcknowledged = true))
+                    val reminder = db.reminderDao().getReminderById(reminderId)
+                    if (reminder != null) {
+                        db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
+                    }
+                    val smartReminder = db.smartReminderDao().getById(reminderId)
+                    if (smartReminder != null) {
+                        db.smartReminderDao().updateSmartReminder(smartReminder.copy(isAcknowledged = true))
                     }
                 }
                 Toast.makeText(context, "Smart Reminder completed and stopped.", Toast.LENGTH_LONG).show()
             }
-        } else if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            scheduleAllWorkers(context)
         }
     }
 }

@@ -15,7 +15,10 @@ data class Task(
     val isRepeating: Boolean = false,
     val repeatInterval: String = "None", // Daily, Weekly, Monthly
     val createdDate: String = "", // YYYY-MM-DD
-    val doneDate: String = "" // YYYY-MM-DD
+    val doneDate: String = "", // YYYY-MM-DD
+    val isDeleted: Boolean = false,
+    val remarks: String = "",
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "reminders")
@@ -28,7 +31,8 @@ data class Reminder(
     val createdAt: Long = System.currentTimeMillis(),
     val chatId: String = "",
     val lastFired: Long = 0L,
-    val remarks: String = ""
+    val remarks: String = "",
+    val isDeleted: Boolean = false
 )
 
 @Entity(tableName = "habits")
@@ -41,7 +45,9 @@ data class Habit(
     val lastLoggedTimestamp: Long = 0L,
     val emoji: String = "✅",
     val bestStreak: Int = 0,
-    val targetPerDay: String = ""
+    val targetPerDay: String = "",
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "water_logs")
@@ -49,7 +55,9 @@ data class WaterLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val mlAmount: Int,
     val timestamp: Long = System.currentTimeMillis(),
-    val dayString: String // YYYY-MM-DD
+    val dayString: String, // YYYY-MM-DD
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "expenses")
@@ -60,7 +68,9 @@ data class Expense(
     val isIncome: Boolean = false,
     val category: String = "Food", // Food, Fuel, Bill, Salary, Rent, Shopping, Health, Other
     val dateString: String, // YYYY-MM-DD
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "bills")
@@ -74,7 +84,9 @@ data class Bill(
     val isAutoPay: Boolean = false,
     val paymentMethod: String = "",
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "calendar_events")
@@ -88,7 +100,9 @@ data class CalendarEvent(
     val type: String = "Meeting", // Meeting, Birthday, Holiday, Custom
     val isAiGenerated: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val remindDayBefore: Boolean = true
+    val remindDayBefore: Boolean = true,
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "diary_entries")
@@ -98,7 +112,9 @@ data class DiaryEntry(
     val text: String,
     val mood: String = "Neutral", // 😊 Happy, 😢 Sad, ⚡ Energetic, 🧘 Peaceful, 😐 Neutral
     val photoPath: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "quick_notes")
@@ -109,7 +125,9 @@ data class QuickNote(
     val isPinned: Boolean = false,
     val isFavorite: Boolean = false,
     val timestamp: Long = System.currentTimeMillis(),
-    val tag: String = "Notes"
+    val tag: String = "Notes",
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "memories")
@@ -117,7 +135,9 @@ data class PersonalMemory(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val content: String,
     val category: String = "General", // Work, Health, Finance, Personal, Study, Shopping, General
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "chat_messages")
@@ -126,7 +146,9 @@ data class ChatMessage(
     val chatSessionId: String = "default",
     val sender: String, // "User" or "Rk" (AI)
     val text: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "smart_reminders")
@@ -138,7 +160,9 @@ data class SmartReminder(
     val repeatIntervalMinutes: Int,
     val maxRepeats: Int,
     val currentRepeat: Int = 0,
-    val isAcknowledged: Boolean = false
+    val isAcknowledged: Boolean = false,
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "voice_notes")
@@ -150,7 +174,9 @@ data class VoiceNote(
     val timestamp: Long = System.currentTimeMillis(),
     val isTranscribed: Boolean = false,
     val status: String = "Success",
-    val category: String = "General"
+    val category: String = "General",
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "goals")
@@ -161,7 +187,10 @@ data class Goal(
     val isDone: Boolean = false,
     val deadline: String = "", // YYYY-MM-DD
     val createdAt: String = "", // YYYY-MM-DD
-    val milestones: String = ""
+    val milestones: String = "",
+    val isDeleted: Boolean = false,
+    val remarks: String = "",
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "recurring_reminders")
@@ -171,7 +200,9 @@ data class RecurringReminder(
     val type: String, // Daily, Weekly, Monthly
     val time: String, // HH:MM
     val isActive: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "remind_links")
@@ -183,7 +214,9 @@ data class RemindLink(
     val dueDateTime: String, // YYYY-MM-DD HH:MM:SS
     val originalMsgId: Long? = null,
     val isAcknowledged: Boolean = false,
-    val createdAt: String = "" // YYYY-MM-DD HH:MM:SS
+    val createdAt: String = "", // YYYY-MM-DD HH:MM:SS
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )
 
 @Entity(tableName = "private_space_items")
@@ -192,6 +225,10 @@ data class PrivateSpaceItem(
     val title: String,
     val content: String, // Encrypted content
     val category: String = "note",
+    val isPinned: Boolean = false,
+    val photoPath: String = "",
     val createdAt: String = "",
-    val modifiedAt: String = ""
+    val modifiedAt: String = "",
+    val isDeleted: Boolean = false,
+    val remarks: String = ""
 )

@@ -35,8 +35,20 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
     var showDialog by remember { mutableStateOf(false) }
     var smartInput by remember { mutableStateOf("") }
 
+    var editingReminder by remember { mutableStateOf<Reminder?>(null) }
     var customTitle by remember { mutableStateOf("") }
     var customDelayMinutes by remember { mutableStateOf("15") }
+
+    LaunchedEffect(editingReminder) {
+        if (editingReminder != null) {
+            customTitle = editingReminder!!.title
+            val diffMs = editingReminder!!.dueDateTime - System.currentTimeMillis()
+            customDelayMinutes = (diffMs / 60000).coerceAtLeast(1).toString()
+        } else {
+            customTitle = ""
+            customDelayMinutes = "15"
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -79,13 +91,7 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
                     .padding(12.dp)
             ) {
                 Column {
-                    Text(
-                        text = "SMART NLP TRIGGER",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonCyan,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    /* Removed SMART NLP TRIGGER text */
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically
@@ -129,7 +135,7 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
                 contentPadding = PaddingValues(bottom = 90.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                val active = remindersList.filter { !it.isAcknowledged }
+                val active = remindersList.filter { !it.isAcknowledged && !it.isDeleted }
                 if (active.isEmpty()) {
                     item {
                         Box(
@@ -151,7 +157,11 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
                     ReminderCard(
                         reminder = reminder,
                         onAcknowledge = { viewModel.acknowledgeReminder(reminder) },
-                        onDelete = { viewModel.deleteReminder(reminder) }
+                        onDelete = { viewModel.deleteReminder(reminder) },
+                        onEdit = {
+                            editingReminder = reminder
+                            showDialog = true
+                        }
                     )
                 }
             }
@@ -160,10 +170,13 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
         // Add Reminder Dialog
         if (showDialog) {
             AlertDialog(
-                onDismissRequest = { showDialog = false },
+                onDismissRequest = { 
+                    showDialog = false
+                    editingReminder = null
+                },
                 containerColor = CardBackgroundGlass,
                 modifier = Modifier.border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
-                title = { Text("SCHEDULE TIMER", color = NeonPink, fontWeight = FontWeight.Bold) },
+                title = { Text(if (editingReminder != null) "EDIT TIMER" else "SCHEDULE TIMER", color = NeonPink, fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         OutlinedTextField(
@@ -198,23 +211,39 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
                         onClick = {
                             val minutes = customDelayMinutes.toIntOrNull() ?: 15
                             if (customTitle.isNotBlank()) {
-                                val triggerMs = System.currentTimeMillis() + (minutes * 60 * 1000)
-                                viewModel.addReminder(
-                                    title = customTitle,
-                                    dueDateTime = triggerMs,
-                                    recurrence = "None"
-                                )
+                                // Align to the exact minute boundary (:00 seconds) as requested
+                                val currentMinuteMs = (System.currentTimeMillis() / 60000) * 60000
+                                val triggerMs = currentMinuteMs + (minutes * 60 * 1000L)
+
+                                if (editingReminder != null) {
+                                    viewModel.addReminder(
+                                        title = customTitle,
+                                        dueDateTime = triggerMs,
+                                        recurrence = editingReminder!!.recurrence
+                                    )
+                                    viewModel.deleteReminder(editingReminder!!)
+                                } else {
+                                    viewModel.addReminder(
+                                        title = customTitle,
+                                        dueDateTime = triggerMs,
+                                        recurrence = "None"
+                                    )
+                                }
                                 customTitle = ""
                                 showDialog = false
+                                editingReminder = null
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonPink)
                     ) {
-                        Text("SCHEDULE", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(if (editingReminder != null) "UPDATE" else "SCHEDULE", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
+                    TextButton(onClick = { 
+                        showDialog = false
+                        editingReminder = null
+                    }) {
                         Text("CANCEL", color = SoftTextGray)
                     }
                 }
@@ -227,7 +256,8 @@ fun ReminderScreen(viewModel: AssistantViewModel) {
 fun ReminderCard(
     reminder: Reminder,
     onAcknowledge: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
 ) {
     val dateTimeStr = SimpleDateFormat("LLL dd • hh:mm a", Locale.US).format(Date(reminder.dueDateTime))
     val isOverdue = System.currentTimeMillis() > reminder.dueDateTime
@@ -274,7 +304,7 @@ fun ReminderCard(
 
                 Column {
                     Text(
-                        text = reminder.title,
+                        text = "#${reminder.id} ${reminder.title}",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 15.sp
@@ -290,6 +320,13 @@ fun ReminderCard(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = SoftTextGray
+                    )
+                }
                 IconButton(onClick = onAcknowledge) {
                     Icon(
                         imageVector = Icons.Default.Check,

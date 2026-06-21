@@ -14,6 +14,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.NetworkRequest
+import android.widget.Toast
 import com.example.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -25,7 +27,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class AppScreen {
-    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace
+    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace, History, PrivateNoteEdit
 }
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,10 +38,33 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Current Screen
     val currentScreen = MutableStateFlow(AppScreen.Dashboard)
+    private val screenStack = mutableListOf<AppScreen>()
+
+    fun navigateTo(screen: AppScreen) {
+        if (currentScreen.value != screen) {
+            screenStack.add(currentScreen.value)
+            currentScreen.value = screen
+        }
+    }
+
+    fun navigateBack(): Boolean {
+        if (screenStack.isNotEmpty()) {
+            currentScreen.value = screenStack.removeAt(screenStack.size - 1)
+            return true
+        }
+        return false
+    }
+
+    val editingPrivateItem = MutableStateFlow<PrivateSpaceItem?>(null)
+
+    // Weather State
+    val weatherTerminal = MutableStateFlow("24°C - Sky Clear")
 
     // Security Lock State
-    val isLocked = MutableStateFlow(prefs.isPinEnabled())
+    val isLocked = MutableStateFlow(prefs.isPinEnabled() && prefs.isAppLockActive())
     val pinError = MutableStateFlow<String?>(null)
+    val isBiometricEnabled = MutableStateFlow(prefs.isBiometricEnabled())
+    val isAppLockActive = MutableStateFlow(prefs.isAppLockActive())
 
     // Private Space Lock State
     val isPrivateSpaceLocked = MutableStateFlow(prefs.hasPrivateSpacePassword())
@@ -62,6 +87,42 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val recurringReminders: StateFlow<List<RecurringReminder>> = repository.allRecurringReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val remindLinks: StateFlow<List<RemindLink>> = repository.allRemindLinks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> = repository.allPrivateSpaceItems.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allActivities: StateFlow<List<ActivityItem>> = combine(
+        tasks, reminders, habits, expenses, bills, events, diaryEntries, notes, memories, smartReminders, voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems
+    ) { arrays ->
+        val list = mutableListOf<ActivityItem>()
+        
+        // 0: tasks, 1: reminders, 2: habits, 3: expenses, 4: bills, 5: events, 6: diaryEntries, 7: notes, 8: memories, 9: smartReminders, 10: voiceNotes, 11: goals, 12: recurringReminders, 13: remindLinks, 14: privateSpaceItems
+        
+        (arrays[0] as List<Task>).forEach { 
+            list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) 
+        }
+        (arrays[1] as List<Reminder>).forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
+        (arrays[2] as List<Habit>).forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
+        (arrays[3] as List<Expense>).forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
+        (arrays[4] as List<Bill>).forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(getTodayDateString().take(7)), it.createdAt)) }
+        (arrays[5] as List<CalendarEvent>).forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
+        (arrays[6] as List<DiaryEntry>).forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
+        (arrays[7] as List<QuickNote>).forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
+        (arrays[8] as List<PersonalMemory>).forEach { list.add(ActivityItem("${it.id}#", "MEMORY", it.content.take(30), "", it.isDeleted, true, it.timestamp)) }
+        (arrays[9] as List<SmartReminder>).forEach { list.add(ActivityItem("${it.id}#", "SMART_REM", it.title, "", it.isDeleted, it.isAcknowledged, it.dueDateTime)) }
+        (arrays[10] as List<VoiceNote>).forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
+        (arrays[11] as List<Goal>).forEach { 
+            list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp))
+        }
+        
+        list.sortedByDescending { it.timestamp }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    data class ActivityItem(
+        val id: String,
+        val type: String,
+        val title: String,
+        val date: String,
+        val isDeleted: Boolean,
+        val isDone: Boolean,
+        val timestamp: Long
+    )
 
     // Water tracker states
     private val currentDay = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
@@ -99,7 +160,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // AI state
     val aiIsGenerating = MutableStateFlow(false)
     val textToSpeechEnabled = MutableStateFlow(true)
-    val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured()) 
+    val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
+    val isLocalAiAvailable = MutableStateFlow(false)
+    val isImportingModel = MutableStateFlow(false)
+    val modelDownloadProgress = MutableStateFlow<Float?>(null)
+
+    // Jarvis Voice AI
+    val isJarvisActive = MutableStateFlow(false)
+    val jarvisStatus = MutableStateFlow("Jarvis Standby")
+    private var speechRecognizer: SpeechRecognizer? = null
 
     // OCR State
     val ocrText = MutableStateFlow<String?>(null)
@@ -107,6 +176,19 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Backup text
     val backupDataJson = MutableStateFlow("")
+
+    private suspend fun updateWeather() {
+        // OpenWeatherMap API Key - In production this should be in BuildConfig/Secrets
+        val weatherKey = "eb648074c6530a6e0d37e69f82635416" 
+        // Default to Mumbai coordinates if location permission not handled yet
+        val lat = 19.0760
+        val lon = 72.8777
+        
+        val result = GeminiService.fetchWeather(lat, lon, weatherKey)
+        if (result != "Weather Error" && result != "Weather unavailable") {
+            weatherTerminal.value = result
+        }
+    }
 
     private fun isNetworkAvailable(): Boolean {
         val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -128,17 +210,57 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var tts: TextToSpeech? = null
 
     init {
-        tts = TextToSpeech(application) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                // Set language to Indian English/Hindi hybrid if possible, or just US with local flavor
-                val result = tts?.setLanguage(Locale("hi", "IN"))
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts?.language = Locale.US
-                }
-            }
+        try {
+            LocalLLMService.initialize(application)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Log the error but don't crash the app
         }
+        isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
+
+        // Use Google TTS engine specifically for best Hindi/Indian English support
+        tts = TextToSpeech(application, { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val locale = Locale("hi", "IN")
+                val result = tts?.setLanguage(locale)
+                
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    // Fallback to Indian English which handles Hinglish much better than US accent
+                    tts?.setLanguage(Locale("en", "IN"))
+                }
+                
+                // Try to select a high-quality (Natural/Network) voice if available
+                try {
+                    val voices = tts?.voices
+                    if (!voices.isNullOrEmpty()) {
+                        val bestVoice = voices.find { v -> 
+                            v.locale.language == "hi" && v.name.lowercase().contains("network")
+                        } ?: voices.find { v -> 
+                            v.locale.language == "hi" && v.name.lowercase().contains("enhanced")
+                        } ?: voices.find { v -> 
+                            v.locale.language == "hi"
+                        } ?: voices.find { v ->
+                            v.locale.language == "en" && v.locale.country == "IN"
+                        }
+                        
+                        bestVoice?.let { tts?.voice = it }
+                    }
+                } catch (e: Exception) {}
+
+                tts?.setPitch(1.0f)
+                tts?.setSpeechRate(0.95f) // Slightly slower for better clarity
+            }
+        }, "com.google.android.tts")
         // Check if API is configured
         isOnline.value = GeminiService.isApiKeyConfigured()
+
+        // --- Weather Update Job ---
+        viewModelScope.launch {
+            while (true) {
+                updateWeather()
+                kotlinx.coroutines.delay(1800000) // Every 30 minutes
+            }
+        }
 
         // --- Background Auto-Sync Job ---
         viewModelScope.launch(Dispatchers.IO) {
@@ -164,43 +286,197 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     override fun onCleared() {
         super.onCleared()
         tts?.shutdown()
+        speechRecognizer?.destroy()
     }
 
-    fun speak(text: String) {
+    fun toggleTextToSpeech() {
+        val newState = !textToSpeechEnabled.value
+        textToSpeechEnabled.value = newState
+        if (!newState) {
+            tts?.stop()
+        }
+    }
+
+    fun speak(text: String, onFinished: (() -> Unit)? = null) {
         if (textToSpeechEnabled.value) {
-            // Pre-process text to make it sound more natural for Hinglish (Muslim friendly)
+            // Enhanced phonetic processing for smoother Hindi/Hinglish delivery
             val processedText = text
                 .replace("Assalamualaikum", "Assalam-o-alaikum")
                 .replace("Alhamdulillah", "Al-ham-du-lillah")
                 .replace("InshAllah", "In-sha-Allah")
                 .replace("MashAllah", "Ma-sha-Allah")
                 .replace("SubhanAllah", "Sub-han-Allah")
+                .replace("RK", "R.K.")
+                .replace("sir", "sir,") // adds a natural pause
+                .replace("theek", "theek")
+                .replace("kaise ho", "kaise ho?")
+                .replace("kya ", "kya, ")
+                .replace("hoon", "hoon.")
             
-            tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, null)
+            if (onFinished != null) {
+                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        viewModelScope.launch(Dispatchers.Main) { onFinished() }
+                    }
+                    override fun onError(utteranceId: String?) {}
+                })
+                val params = android.os.Bundle()
+                params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "id")
+                tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, params, "id")
+            } else {
+                tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, null)
+            }
+        } else {
+            onFinished?.invoke()
         }
     }
 
+    fun toggleJarvisMode() {
+        if (isJarvisActive.value) {
+            stopJarvisListening()
+        } else {
+            startJarvisListening()
+        }
+    }
+
+    private fun startJarvisListening() {
+        val context = getApplication<Application>()
+        if (speechRecognizer == null) {
+            speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+        }
+        
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-IN") // Support Indian English
+        
+        speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) {
+                jarvisStatus.value = "Listening..."
+            }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {
+                jarvisStatus.value = "Processing..."
+            }
+            override fun onError(error: Int) {
+                if (!isJarvisActive.value) return // Don't restart if turned off
+
+                if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH || error == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                    jarvisStatus.value = "Say something..."
+                    startJarvisListening() // Keep listening if no speech detected
+                } else {
+                    jarvisStatus.value = "Error: $error"
+                    isJarvisActive.value = false
+                }
+            }
+            override fun onResults(results: android.os.Bundle?) {
+                if (!isJarvisActive.value) return // Don't process if turned off
+
+                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    handleJarvisVoiceCommand(matches[0])
+                } else {
+                    startJarvisListening()
+                }
+            }
+            override fun onPartialResults(partialResults: android.os.Bundle?) {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+        
+        isJarvisActive.value = true
+        speechRecognizer?.startListening(intent)
+    }
+
+    private fun stopJarvisListening() {
+        isJarvisActive.value = false
+        jarvisStatus.value = "Jarvis Standby"
+        speechRecognizer?.cancel() // Immediate cancel instead of just stop
+        tts?.stop()
+    }
+
+    private fun handleJarvisVoiceCommand(text: String) {
+        val cleanedText = text.lowercase()
+            .replace("rk", "")
+            .replace("jarvis", "")
+            .trim()
+            
+        viewModelScope.launch {
+            val session = currentChatSessionId.value
+            repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "User", text = text))
+            
+            jarvisStatus.value = "Thinking..."
+            
+            if (!LocalLLMService.isModelAvailable(getApplication()) && !isNetworkAvailable()) {
+                speak("Sir, Offline model not found and internet is also down. I cannot process this.")
+                jarvisStatus.value = "Offline & No Model"
+                return@launch
+            }
+            
+            val localResult = processLocalCommand(cleanedText)
+            
+            val response = if (localResult != null) {
+                localResult
+            } else {
+                var aiRes: String? = null
+            if (isOnline.value && isNetworkAvailable() && GeminiService.isApiKeyConfigured()) {
+                aiRes = GeminiService.chat(text, "You are RK, a helpful personal assistant. Introduce yourself as 'Main RK, aapka personal voice assistant hoon'. Speak in natural, polite Hindi/Hinglish.")
+            }
+                aiRes ?: LocalLLMService.generateResponse(text, getApplication())
+            }
+            
+            repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = response))
+            jarvisStatus.value = "Speaking..."
+            
+            speak(response) {
+                if (isJarvisActive.value) {
+                    startJarvisListening() // Listen again after speaking
+                }
+            }
+        }
+    }
+
+
     // --- Security ---
+    fun toggleBiometricSetting(enabled: Boolean) {
+        prefs.setBiometricEnabled(enabled)
+        isBiometricEnabled.value = enabled
+    }
+
+    fun toggleAppLock(enabled: Boolean) {
+        prefs.setAppLockActive(enabled)
+        isAppLockActive.value = enabled
+    }
+
+    fun unlockWithBiometric() {
+        isLocked.value = false
+        speak("Welcome back RK")
+    }
+
     fun setOrUpdatePin(pin: String) {
         if (pin.length == 4) {
             prefs.savePin(pin)
             isLocked.value = true
+            speak("Security PIN set successfully. Main aapka data secure rakhunga.")
         }
     }
 
     fun removePin() {
         prefs.clearPin()
         isLocked.value = false
+        speak("Security PIN removed. Device open hai.")
     }
 
     fun unlockApp(pin: String): Boolean {
         return if (prefs.verifyPin(pin)) {
             isLocked.value = false
             pinError.value = null
-            speak("Welcome back, authorized.")
+            speak("Welcome back RK")
             true
         } else {
             pinError.value = "Incorrect PIN. Try again."
+            speak("Ghalat PIN. Dubara koshish karein.")
             false
         }
     }
@@ -470,8 +746,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (localResult != null) {
                 repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = localResult))
                 aiIsGenerating.value = false
-                // REMOVED speak from console/chat screen as per request
-                // speak(localResult) 
+                speak(localResult)
                 return@launch
             }
 
@@ -481,6 +756,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 if (smartResult != null) {
                     repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = smartResult))
                     aiIsGenerating.value = false
+                    speak(smartResult) 
                     return@launch
                 }
             }
@@ -489,30 +765,34 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val allMemoryFacts = memories.value.joinToString("\n") { "- ${it.category}: ${it.content}" }
             val todayTasks = tasks.value.filter { !it.isCompleted }.take(5).joinToString(", ") { it.title }
             val systemContext = """
-                You are RK, a smart personal AI assistant app. Be friendly, helpful and concise.
-                Today's date: ${getTodayDateString()}
+                You are RK, a smart personal AI assistant. Introduce yourself as "Main RK, aapka personal voice assistant hoon".
+                Be very helpful, polite, and answer ANY question the user asks. 
+                If you are online, use your full intelligence. If the user asks about privacy, reassure them that data stays on their device and backup is secure to Google Sheets.
                 
+                Today's date: ${getTodayDateString()}
                 User's active tasks: $todayTasks
                 Personal memories: $allMemoryFacts
                 
-                You can help with: tasks, reminders, expenses, notes, habits, water tracking, calendar, diary.
-                For adding items, tell user to use the form in each screen, or type commands like:
-                "add task [title]", "remind 30m [title]", "water 250", "expense 200 [item]", "note [text]", "remember [fact]"
-                
-                Keep responses short and actionable.
+                You help with: tasks, reminders, expenses, notes, habits, water tracking, calendar, diary.
+                Language: Natural Hindi/Hinglish.
             """.trimIndent()
 
-            val aiResponse = (if (isNetworkAvailable()) {
+            val aiResponse = if (isNetworkAvailable()) {
                 GeminiService.chat(
                     prompt = userPrompt,
                     systemInstruction = systemContext,
-                    chatHistory = chatMessages.value.dropLast(1) // exclude current message
-                )
-            } else null) ?: "Assalamualaikum! Main RK hoon. Abhi internet offline hai, par main local commands samajh sakta hoon. Batao kya help chahiye?\nTasks, reminders, kharcha, diary, calendar, bills?"
+                    chatHistory = chatMessages.value.dropLast(1)
+                ) ?: (if (isLocalAiAvailable.value) LocalLLMService.generateResponse(userPrompt, getApplication()) else null)
+            } else if (isLocalAiAvailable.value) {
+                LocalLLMService.generateResponse("System: You are RK AI. User asks: $userPrompt", getApplication())
+            } else {
+                "Assalamualaikum! Main RK hoon. Abhi internet offline hai aur local model bhi nahi mila. Please model download karein ya internet on karein."
+            }
 
-            repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = aiResponse))
+            val finalResponse = aiResponse ?: "Maaf kijiyega Boss, main samajh nahi paya. Ek baar phir boliye?"
+            repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = finalResponse))
             aiIsGenerating.value = false
-            // speak(aiResponse) // REMOVED speak from console/chat screen as per request
+            speak(finalResponse)
         }
     }
 
@@ -534,7 +814,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // --- 0. GREETINGS & HELP ---
         val greetings = listOf("hello", "hi", "hey", "assalamualaikum", "salam", "hola", "namaste")
         if (greetings.any { first == it } && c.length < 25) {
-            return "Assalamualaikum! Main RK hoon - aapka personal AI assistant. Batao kya help chahiye?\nTasks, reminders, kharcha, diary, calendar, bills?"
+            return "Assalamualaikum! Main RK, aapka personal voice assistant hoon. Bataiye Boss, main aapki kya madad kar sakta hoon?"
         }
         if (first == "help" || first == "commands" || c == "kya kar sakte ho") {
             return "Main aapki in sab mein help kar sakta hoon:\n" +
@@ -1052,13 +1332,27 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     // --- Private Space Actions ---
-    fun addPrivateSpaceItem(title: String, content: String, category: String) {
+    fun addPrivateSpaceItem(title: String, content: String, category: String, photoPath: String = "") {
         viewModelScope.launch {
             val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
             repository.insertPrivateSpaceItem(PrivateSpaceItem(
                 title = title, content = content, category = category,
+                photoPath = photoPath,
                 createdAt = now, modifiedAt = now
             ))
+        }
+    }
+
+    fun updatePrivateSpaceItem(item: PrivateSpaceItem) {
+        viewModelScope.launch {
+            val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            repository.updatePrivateSpaceItem(item.copy(modifiedAt = now))
+        }
+    }
+
+    fun togglePrivateSpaceItemPin(item: PrivateSpaceItem) {
+        viewModelScope.launch {
+            repository.updatePrivateSpaceItem(item.copy(isPinned = !item.isPinned))
         }
     }
 
@@ -1080,163 +1374,148 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             lastSyncStatus.value = "Syncing data to Google Sheets..."
 
             try {
-                val root = JSONObject()
-                
-                // 1. Tasks
-                val taskArr = JSONArray()
-                tasks.value.forEach { t ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${t.id}#"); obj.put("Title", t.title); obj.put("Priority", t.priority)
-                    obj.put("Status", if (t.isCompleted) "Completed" else "Pending")
-                    obj.put("Created", t.createdDate); obj.put("Done Date", t.doneDate)
-                    taskArr.put(obj)
-                }
-                root.put("Tasks", taskArr)
-
-                // 2. Reminders
-                val remArr = JSONArray()
-                reminders.value.forEach { r ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${r.id}#"); obj.put("Due", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(r.dueDateTime)))
-                    obj.put("Text", r.title); obj.put("Repeat", r.recurrence)
-                    obj.put("Status", if (r.isAcknowledged) "Acknowledged" else "Active")
-                    obj.put("Created Date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(r.createdAt)))
-                    obj.put("Chat ID", r.chatId); obj.put("Last Fired", if (r.lastFired > 0) SimpleDateFormat("HH:mm", Locale.US).format(Date(r.lastFired)) else "")
-                    obj.put("Acknowledged", r.isAcknowledged); obj.put("Remarks", r.remarks)
-                    remArr.put(obj)
-                }
-                root.put("Reminders", remArr)
-
-                // 3. Expenses
-                val expArr = JSONArray()
-                expenses.value.forEach { e ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${e.id}#"); obj.put("Date", e.dateString)
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(e.timestamp)))
-                    obj.put("Amount", e.amount)
-                    obj.put("Description", e.title)
-                    obj.put("Category", e.category)
-                    expArr.put(obj)
-                }
-                root.put("Expenses", expArr)
-
-                // 4. Habits
-                val habitArr = JSONArray()
-                habits.value.forEach { h ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${h.id}#"); obj.put("Habit Name", h.name)
-                    obj.put("Emoji", h.emoji); obj.put("Streak", h.streakCount)
-                    obj.put("Best Streak", h.bestStreak)
-                    obj.put("Created Date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(h.lastLoggedTimestamp))) // Approximate
-                    obj.put("Target (per day)", h.targetPerDay)
-                    habitArr.put(obj)
-                }
-                root.put("Habits", habitArr)
-
-                // 5. Diary
-                val diaryArr = JSONArray()
-                diaryEntries.value.forEach { d ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${d.id}#"); obj.put("Date", d.dateString)
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(d.timestamp)))
-                    obj.put("Text", d.text); obj.put("Mood", d.mood)
-                    diaryArr.put(obj)
-                }
-                root.put("Diary", diaryArr)
-
-                // 6. Bills
-                val billArr = JSONArray()
-                bills.value.forEach { b ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${b.id}#"); obj.put("Name", b.name); obj.put("Amount", b.amount)
-                    obj.put("Due Day", b.dueDayOfMonth)
-                    obj.put("Status", if (b.paidMonthsCommaSeparated.contains(SimpleDateFormat("yyyy-MM", Locale.US).format(Date()))) "Paid" else "Unpaid")
-                    obj.put("Auto Pay", if (b.isAutoPay) "Yes" else "No")
-                    obj.put("Payment Method", b.paymentMethod); obj.put("Notes", b.notes)
-                    obj.put("Created", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(b.createdAt)))
-                    billArr.put(obj)
-                }
-                root.put("Bills & Subscriptions", billArr)
-
-                // 7. Events
-                val eventArr = JSONArray()
-                events.value.forEach { v ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${v.id}#"); obj.put("Title", v.title); obj.put("Date", v.dateString)
-                    obj.put("Time", v.timeString); obj.put("Location", v.location)
-                    obj.put("Notes", v.notes); obj.put("Type", v.type)
-                    obj.put("Created", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(v.createdAt)))
-                    eventArr.put(obj)
-                }
-                root.put("Calendar Events", eventArr)
-
-                // 8. Water
-                val waterArr = JSONArray()
-                waterLogs.value.forEach { w ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${w.id}#"); obj.put("Date", w.dayString)
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(w.timestamp)))
-                    obj.put("ML Added", w.mlAmount)
-                    waterArr.put(obj)
-                }
-                root.put("Water Intake", waterArr)
-
-                // 9. Memories
-                val memArr = JSONArray()
-                memories.value.forEach { m ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${m.id}#"); obj.put("Date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(m.timestamp)))
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(m.timestamp)))
-                    obj.put("Fact", m.content)
-                    memArr.put(obj)
-                }
-                root.put("Memory / Important Notes", memArr)
-
-                // 10. Voice Notes
-                val voiceArr = JSONArray()
-                voiceNotes.value.forEach { v ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${v.id}#"); obj.put("Date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(v.timestamp)))
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(v.timestamp)))
-                    obj.put("Transcript", v.transcription); obj.put("Saved To", v.filePath)
-                    obj.put("Duration", v.duration); obj.put("Status", v.status); obj.put("Category", v.category)
-                    voiceArr.put(obj)
-                }
-                root.put("Voice Notes", voiceArr)
-
-                // 11. Quick Notes
-                val noteArr = JSONArray()
-                notes.value.forEach { n ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${n.id}#"); obj.put("Date", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(n.timestamp)))
-                    obj.put("Time", SimpleDateFormat("HH:mm", Locale.US).format(Date(n.timestamp)))
-                    obj.put("Text", n.content); obj.put("Status", if (n.isPinned) "Pinned" else "Normal")
-                    noteArr.put(obj)
-                }
-                root.put("Quick Notes", noteArr)
-
-                // 12. Goals
-                val goalArr = JSONArray()
-                goals.value.forEach { g ->
-                    val obj = JSONObject()
-                    obj.put("ID", "${g.id}#"); obj.put("Title", g.title)
-                    obj.put("Progress", g.progress); obj.put("Status", if (g.isDone) "Done" else "Active")
-                    obj.put("Deadline", g.deadline); obj.put("Created", g.createdAt)
-                    goalArr.put(obj)
-                }
-                root.put("Goals", goalArr)
-
-                val success = GoogleSheetsService.sync(root.toString(), scriptUrl)
+                val success = SyncHelper.performSync(db, scriptUrl)
                 if (success) {
                     lastSyncStatus.value = "✅ Sync Successful! (${SimpleDateFormat("HH:mm", Locale.US).format(Date())})"
                 } else {
-                    lastSyncStatus.value = "❌ Sync Failed. check script doPost(e) & URL."
+                    lastSyncStatus.value = "❌ Sync Failed. Check script doPost(e) & URL."
                 }
             } catch (e: Exception) {
                 lastSyncStatus.value = "❌ Error: ${e.localizedMessage}"
             } finally {
                 isSyncing.value = false
             }
+        }
+    }
+
+    fun deleteModel() {
+        val context = getApplication<Application>()
+        val file = java.io.File(context.getExternalFilesDir(null), LocalLLMService.MODEL_PATH)
+        if (file.exists()) {
+            file.delete()
+        }
+        LocalLLMService.reset()
+        isLocalAiAvailable.value = false
+        Toast.makeText(context, "Model deleted.", Toast.LENGTH_SHORT).show()
+    }
+
+    fun importModelFromFile(inputStream: InputStream) {
+        viewModelScope.launch(Dispatchers.IO) {
+            isImportingModel.value = true
+            try {
+                val context = getApplication<Application>()
+                val file = java.io.File(context.getExternalFilesDir(null), LocalLLMService.MODEL_PATH)
+                val outputStream = java.io.FileOutputStream(file)
+                inputStream.copyTo(outputStream)
+                outputStream.close()
+                inputStream.close()
+                
+                withContext(Dispatchers.Main) {
+                    LocalLLMService.initialize(context)
+                    isLocalAiAvailable.value = LocalLLMService.isModelAvailable(context)
+                    isImportingModel.value = false
+                    Toast.makeText(context, "Model imported successfully!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isImportingModel.value = false
+                    Toast.makeText(getApplication(), "Failed to import model: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun downloadOfflineModel() {
+        val context = getApplication<Application>()
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+        
+        val request = android.app.DownloadManager.Request(android.net.Uri.parse(LocalLLMService.MODEL_URL))
+            .setTitle("Downloading RK Offline AI Model")
+            .setDescription("Qwen 2.5 1.5B Model (1.6GB) - Please wait...")
+            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalFilesDir(context, null, LocalLLMService.MODEL_PATH)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+            .setAllowedNetworkTypes(android.app.DownloadManager.Request.NETWORK_WIFI or android.app.DownloadManager.Request.NETWORK_MOBILE)
+        
+        val downloadId = downloadManager.enqueue(request)
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            var downloading = true
+            while (downloading) {
+                val query = android.app.DownloadManager.Query().setFilterById(downloadId)
+                val cursor = downloadManager.query(query)
+                if (cursor.moveToFirst()) {
+                    val statusIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_STATUS)
+                    val bytesDownloadedIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                    val bytesTotalIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+
+                    val status = if (statusIdx != -1) cursor.getInt(statusIdx) else -1
+                    val bytesDownloaded = if (bytesDownloadedIdx != -1) cursor.getInt(bytesDownloadedIdx) else 0
+                    val bytesTotal = if (bytesTotalIdx != -1) cursor.getInt(bytesTotalIdx) else 0
+                    
+                    if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
+                        downloading = false
+                        modelDownloadProgress.value = 1f
+                        withContext(Dispatchers.Main) {
+                            LocalLLMService.initialize(context)
+                            isLocalAiAvailable.value = LocalLLMService.isModelAvailable(context)
+                            if (isLocalAiAvailable.value) {
+                                Toast.makeText(context, "Model setup successful!", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Setup failed! Model file not found.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } else if (status == android.app.DownloadManager.STATUS_FAILED) {
+                        downloading = false
+                        modelDownloadProgress.value = null
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Download failed!", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        if (bytesTotal > 0) {
+                            modelDownloadProgress.value = bytesDownloaded.toFloat() / bytesTotal.toFloat()
+                        }
+                    }
+                }
+                cursor.close()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+
+    fun sendDaySummary() {
+        val today = getTodayDateString()
+        val completedTasksToday = tasks.value.count { it.isCompleted && it.doneDate == today }
+        val todayExpenses = expenses.value.filter { it.dateString == today && !it.isIncome }.sumOf { it.amount }.toInt()
+        val waterIntake = todayWaterSum.value
+        val waterGoal = prefs.getWaterGoal()
+        
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        val tomorrow = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
+        val tomorrowEvents = events.value.filter { it.dateString == tomorrow }
+        
+        val eventText = if (tomorrowEvents.isEmpty()) {
+            "Kal koi event nahi hai."
+        } else {
+            "📅 Kal ke events:\n" + tomorrowEvents.joinToString("\n") { "• ${it.timeString}: ${it.title}" }
+        }
+
+        val summary = """
+            Namaste RK! 
+            Aaj aapne $completedTasksToday tasks pure kiye hain. 
+            Total kharch: ₹$todayExpenses. 
+            Paani: ${waterIntake}ml / ${waterGoal}ml.
+            
+            $eventText
+            
+            RK AI hamesha aapki madad ke liye taiyar hai!
+        """.trimIndent()
+
+        viewModelScope.launch {
+            val session = currentChatSessionId.value
+            repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = summary))
         }
     }
 }

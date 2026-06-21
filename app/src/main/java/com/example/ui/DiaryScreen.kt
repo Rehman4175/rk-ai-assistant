@@ -97,89 +97,107 @@ fun DiaryScreen(viewModel: AssistantViewModel) {
             }
         }
 
-        // Add/Update Diary Dialog
-        if (showDialog) {
-            AlertDialog(
-                onDismissRequest = { showDialog = false },
-                containerColor = CardBackgroundGlass,
-                modifier = Modifier.border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
-                title = { Text("DOCUMENT JOURNAL LOG", color = NeonGreen, fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Mood selector row
-                        Text("Mood energy selection", color = SoftTextGray, fontSize = 12.sp)
-                        val moodList = listOf("Happy", "Sad", "Energetic", "Peaceful", "Neutral")
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            moodList.take(3).forEach { m ->
-                                val isSel = selectedMood == m
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSel) NeonGreen else Color(0xFF141624))
-                                        .clickable { selectedMood = m }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(m, color = if (isSel) Color.Black else SoftTextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            moodList.takeLast(2).forEach { m ->
-                                val isSel = selectedMood == m
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSel) NeonGreen else Color(0xFF141624))
-                                        .clickable { selectedMood = m }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(m, color = if (isSel) Color.Black else SoftTextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+    var isPrivateEntry by remember { mutableStateOf(false) }
 
-                        OutlinedTextField(
-                            value = entryText,
-                            onValueChange = { entryText = it },
-                            placeholder = { Text("What did you accomplish today? Reflect on your goals, mind state...", color = SoftTextGray, fontSize = 13.sp) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = NeonGreen,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            maxLines = 8,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (entryText.isNotBlank()) {
-                                viewModel.addOrUpdateDiaryEntry(todayStr, entryText, selectedMood, "")
-                                entryText = ""
-                                showDialog = false
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = CardBackgroundGlass,
+            modifier = Modifier.border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
+            title = { Text("DOCUMENT JOURNAL LOG", color = NeonGreen, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Mood selector row
+                    Text("Mood energy selection", color = SoftTextGray, fontSize = 12.sp)
+                    val moodList = listOf("Happy", "Sad", "Energetic", "Peaceful", "Neutral")
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        moodList.take(3).forEach { m ->
+                            val isSel = selectedMood == m
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) NeonGreen else Color(0xFF141624))
+                                    .clickable { selectedMood = m }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(m, color = if (isSel) Color.Black else SoftTextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
-                    ) {
-                        Text("DOCUMENT", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
-                        Text("CANCEL", color = SoftTextGray)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        moodList.takeLast(2).forEach { m ->
+                            val isSel = selectedMood == m
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) NeonGreen else Color(0xFF141624))
+                                    .clickable { selectedMood = m }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(m, color = if (isSel) Color.Black else SoftTextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = entryText,
+                        onValueChange = { entryText = it },
+                        placeholder = { Text("What did you accomplish today? Reflect on your goals, mind state...", color = SoftTextGray, fontSize = 13.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonGreen,
+                            unfocusedBorderColor = BorderColor,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        maxLines = 8,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { isPrivateEntry = !isPrivateEntry }
+                    ) {
+                        Checkbox(
+                            checked = isPrivateEntry,
+                            onCheckedChange = { isPrivateEntry = it },
+                            colors = CheckboxDefaults.colors(checkedColor = NeonGreen)
+                        )
+                        Text("Save to Private Space (Password Locked)", color = Color.White, fontSize = 12.sp)
                     }
                 }
-            )
-        }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (entryText.isNotBlank()) {
+                            if (isPrivateEntry) {
+                                viewModel.addPrivateSpaceItem("Diary - $todayStr", entryText, "Diary")
+                            } else {
+                                viewModel.addOrUpdateDiaryEntry(todayStr, entryText, selectedMood, "")
+                            }
+                            entryText = ""
+                            isPrivateEntry = false
+                            showDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                ) {
+                    Text("DOCUMENT", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("CANCEL", color = SoftTextGray)
+                }
+            }
+        )
+    }
     }
 }
 

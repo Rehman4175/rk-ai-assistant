@@ -14,7 +14,8 @@ class DatabaseRepository(private val db: AppDatabase) {
     // Reminders
     val activeReminders: Flow<List<Reminder>> = db.reminderDao().getActiveReminders()
     val allReminders: Flow<List<Reminder>> = db.reminderDao().getAllReminders()
-    suspend fun insertReminder(reminder: Reminder) = db.reminderDao().insertReminder(reminder)
+    val fullReminderHistory: Flow<List<Reminder>> = db.reminderDao().getFullHistory()
+    suspend fun insertReminder(reminder: Reminder): Long = db.reminderDao().insertReminder(reminder)
     suspend fun updateReminder(reminder: Reminder) = db.reminderDao().updateReminder(reminder)
     suspend fun deleteReminder(reminder: Reminder) = db.reminderDao().deleteReminder(reminder)
 
@@ -28,6 +29,7 @@ class DatabaseRepository(private val db: AppDatabase) {
     fun getWaterLogs(day: String): Flow<List<WaterLog>> = db.waterLogDao().getLogsByDay(day)
     fun getWaterSum(day: String): Flow<Int?> = db.waterLogDao().getWaterSumByDay(day)
     suspend fun insertWaterLog(log: WaterLog) = db.waterLogDao().insertLog(log)
+    suspend fun updateWaterLog(log: WaterLog) = db.waterLogDao().updateLog(log)
     suspend fun deleteWaterLogById(id: Int) = db.waterLogDao().deleteLogById(id)
 
     // Expenses
@@ -47,6 +49,7 @@ class DatabaseRepository(private val db: AppDatabase) {
     val allEvents: Flow<List<CalendarEvent>> = db.calendarEventDao().getAllEvents()
     fun getEventsByDay(day: String): Flow<List<CalendarEvent>> = db.calendarEventDao().getEventsByDay(day)
     suspend fun insertEvent(event: CalendarEvent) = db.calendarEventDao().insertEvent(event)
+    suspend fun updateEvent(event: CalendarEvent) = db.calendarEventDao().updateEvent(event)
     suspend fun deleteEvent(event: CalendarEvent) = db.calendarEventDao().deleteEvent(event)
 
     // Diary
@@ -100,6 +103,7 @@ class DatabaseRepository(private val db: AppDatabase) {
     val activeRecurringReminders: Flow<List<RecurringReminder>> = db.recurringReminderDao().getActiveRecurringReminders()
     val allRecurringReminders: Flow<List<RecurringReminder>> = db.recurringReminderDao().getAll()
     suspend fun insertRecurringReminder(reminder: RecurringReminder) = db.recurringReminderDao().insert(reminder)
+    suspend fun updateRecurringReminder(reminder: RecurringReminder) = db.recurringReminderDao().update(reminder)
     suspend fun deleteRecurringReminder(reminder: RecurringReminder) = db.recurringReminderDao().delete(reminder)
 
     // Remind Links

@@ -1,92 +1,102 @@
 package com.example.data
 
-// ===== SMART COMMAND PARSER =====
-// ✅ Sirf pehla word command decide karega
+import java.util.regex.Pattern
 
 object SmartCommandParser {
 
     enum class CommandType {
-        REMINDER,
-        TASK,
-        EXPENSE,
-        EVENT,
-        NOTE,
-        DAIRY,
-        SEARCH,
-        HELP,
-        UNKNOWN
+        REMINDER, TASK, EXPENSE, NOTE, DAIRY, HELP, UNKNOWN
     }
 
     data class ParsedCommand(
         val type: CommandType,
         val rawText: String,
         val commandWord: String,
-        val restText: String,
-        val delayMinutes: Int = 0,
-        val delaySeconds: Int = 0,
-        val delayHours: Int = 0,
-        val delayDays: Int = 0
+        val restText: String
     )
+
+    data class ReminderResult(val title: String, val dueTime: Long)
 
     fun parse(input: String): ParsedCommand {
         val trimmed = input.trim()
-        if (trimmed.isEmpty()) {
-            return ParsedCommand(CommandType.UNKNOWN, trimmed, "", "")
-        }
-
         val words = trimmed.split("\\s+".toRegex())
         val firstWord = words.firstOrNull()?.lowercase() ?: ""
 
-        // ✅ Pehla word command decide karega
         val commandType = when (firstWord) {
             "remind", "reminder" -> CommandType.REMINDER
-            "task", "todo", "addtask" -> CommandType.TASK
-            "expense", "spent", "pay" -> CommandType.EXPENSE
-            "event", "meeting", "schedule" -> CommandType.EVENT
+            "task", "todo", "kaam", "kam", "work" -> CommandType.TASK
+            "expense", "spent", "paisa", "kharcha" -> CommandType.EXPENSE
             "note", "addnote" -> CommandType.NOTE
             "dairy", "diary" -> CommandType.DAIRY
-            "search", "find" -> CommandType.SEARCH
             "help", "?" -> CommandType.HELP
             else -> CommandType.UNKNOWN
         }
-
-        val restText = words.drop(1).joinToString(" ")
-
-        // ✅ Time extract karein (2 min, 30 sec, 1 hour, etc.)
-        val (delayMinutes, delaySeconds, delayHours, delayDays) = extractTime(restText)
 
         return ParsedCommand(
             type = commandType,
             rawText = trimmed,
             commandWord = firstWord,
-            restText = restText,
-            delayMinutes = delayMinutes,
-            delaySeconds = delaySeconds,
-            delayHours = delayHours,
-            delayDays = delayDays
+            restText = words.drop(1).joinToString(" ")
         )
     }
 
-    private fun extractTime(text: String): Tuple4 {
-        var minutes = 0
-        var seconds = 0
-        var hours = 0
-        var days = 0
+    /**
+     * Robust Reminder Parser
+     * Handles "remind me in 2 min", "2 min baad paani pina", etc.
+     */
+    fun parseReminder(input: String): ReminderResult? {
+        val low = input.lowercase()
+            .replace("reminder", "")
+            .replace("remind", "")
+            .replace("me", "")
+            .replace("mujhe", "")
+            .replace("add kro", "")
+            .replace("add", "")
+            .trim()
 
-        val regex = Regex("""(\d+)\s*(min|minute|minutes|sec|second|seconds|hour|hours|hr|day|days)""", RegexOption.IGNORE_CASE)
-        regex.findAll(text).forEach { match ->
-            val value = match.groupValues[1].toIntOrNull() ?: 0
-            val unit = match.groupValues[2].lowercase()
-            when {
-                unit.startsWith("min") -> minutes = value
-                unit.startsWith("sec") -> seconds = value
-                unit.startsWith("hour") || unit.startsWith("hr") -> hours = value
-                unit.startsWith("day") -> days = value
+        if (low.isEmpty()) return null
+
+        val now = System.currentTimeMillis()
+        var delayMs: Long
+        var cleanTitle = low
+
+        // Time regex: handles "2 min", "1 hour", "30 sec"
+        val timePattern = Pattern.compile("(\\d+)\\s*(min|minute|minutes|hr|hour|hours|sec|second|seconds|m|h|s)")
+        val matcher = timePattern.matcher(low)
+        
+        if (matcher.find()) {
+            val value = matcher.group(1)?.toLong() ?: 0L
+            val unit = matcher.group(2) ?: "min"
+            
+            delayMs = when {
+                unit.startsWith("h") -> value * 3600000L
+                unit.startsWith("s") -> value * 1000L
+                else -> value * 60000L
             }
+
+            // Align to minute boundary (:00) if using minutes/hours for "theek" timing
+            val triggerTime = if (!unit.startsWith("s")) {
+                ((now / 60000) * 60000) + delayMs
+            } else {
+                now + delayMs
+            }
+            
+            // Remove time part from title
+            val timeString = matcher.group(0)
+            cleanTitle = if (timeString != null) {
+                low.replace(timeString, "")
+                    .replace("baad", "")
+                    .replace("baar", "")
+                    .replace("in", "")
+                    .trim()
+            } else low
+            
+            val finalTitle = cleanTitle.ifBlank { "Reminder" }.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            return ReminderResult(finalTitle, triggerTime)
+        } else {
+            // Default 10 mins if no time found
+            val triggerTime = ((now / 60000) * 60000) + (10 * 60000L)
+            return ReminderResult("Reminder", triggerTime)
         }
-
-        return Tuple4(minutes, seconds, hours, days)
     }
-
-    private data class Tuple4(val minutes: Int, val seconds: Int, val hours: Int, val days: Int)
 }

@@ -2,7 +2,9 @@ package com.example.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,17 +12,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,13 +59,25 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncStatus by viewModel.lastSyncStatus.collectAsState()
 
+    val isUrlValid = scriptUrlInput.isBlank() || scriptUrlInput.contains("script.google.com/macros/s/")
+    val isSpreadsheetUrl = scriptUrlInput.contains("docs.google.com/spreadsheets")
+
     var notificationTuneInput by remember { mutableStateOf(viewModel.prefs.getNotificationTune()) }
+    var showSoundPicker by remember { mutableStateOf(false) }
 
     // Sound Picker Launcher
     val soundPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                // Take persistable permission to access the file in background/after reboot
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {}
+
             val uriString = uri.toString()
             notificationTuneInput = uriString
             viewModel.prefs.saveNotificationTune(uriString)
@@ -67,7 +87,8 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
     var feedbackMsg by remember { mutableStateOf<String?>(null) }
 
-    val isPinEnabled by viewModel.isLocked.collectAsState()
+    val isAppLockActive by viewModel.isAppLockActive.collectAsState()
+    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
     var showPinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
 
@@ -109,6 +130,23 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
         }
     }
 
+    // Model File Picker
+    val modelPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            Toast.makeText(context, "Model file selected! Processing...", Toast.LENGTH_SHORT).show()
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                if (inputStream != null) {
+                    viewModel.importModelFromFile(inputStream)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     if (showPinDialog) {
         AlertDialog(
             onDismissRequest = { showPinDialog = false },
@@ -138,7 +176,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             viewModel.setOrUpdatePin(pinInput)
                             showPinDialog = false
                             pinInput = ""
-                            Toast.makeText(context, "Vault PIN set successfully!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Security PIN set successfully!", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "Please enter exactly 4 digits.", Toast.LENGTH_SHORT).show()
                         }
@@ -165,6 +203,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             // Header
@@ -252,7 +291,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { soundPickerLauncher.launch("audio/*") },
+                            .clickable { showSoundPicker = true },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -260,9 +299,9 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             Icon(Icons.Default.MusicNote, null, tint = NeonCyan)
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
-                                Text("Custom Notification Tune", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Notification Tune Selection", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(
-                                    text = if (notificationTuneInput.isBlank()) "Default system sound" else "Custom sound selected",
+                                    text = if (notificationTuneInput.isBlank()) "Default system sound" else "Selected: ${notificationTuneInput.takeLast(20)}...",
                                     color = SoftTextGray,
                                     fontSize = 11.sp
                                 )
@@ -271,6 +310,20 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         Icon(Icons.Default.ChevronRight, null, tint = SoftTextGray)
                     }
                 }
+            }
+
+            if (showSoundPicker) {
+                SoundSelectionDialog(
+                    onDismiss = { showSoundPicker = false },
+                    onSelect = { uri ->
+                        notificationTuneInput = uri.toString()
+                        viewModel.prefs.saveNotificationTune(uri.toString())
+                        showSoundPicker = false
+                        Toast.makeText(context, "Notification tune updated!", Toast.LENGTH_SHORT).show()
+                    },
+                    currentUri = notificationTuneInput,
+                    onCustomClick = { soundPickerLauncher.launch(arrayOf("audio/*")) }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -286,23 +339,59 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
-                        text = "APP SECURITY VAULT",
+                        text = "APP SECURITY & LOCK",
                         color = NeonCyan,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
 
+                    // Fingerprint/Biometric Status
+                    val biometricHelper = remember { com.example.data.BiometricHelper(context) }
+                    val isBioAvailable = remember { biometricHelper.isBiometricAvailable() }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(androidx.compose.material.icons.Icons.Default.Fingerprint, null, tint = if (isBioAvailable) NeonCyan else SoftTextGray)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text("Biometric Support", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(if (isBioAvailable) "Ready to use" else "Not supported/setup", color = SoftTextGray, fontSize = 11.sp)
+                            }
+                        }
+                        if (isBioAvailable) {
+                            Switch(
+                                checked = isBiometricEnabled,
+                                onCheckedChange = { viewModel.toggleBiometricSetting(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = NeonCyan,
+                                    checkedTrackColor = NeonCyan.copy(alpha = 0.5f)
+                                )
+                            )
+                        }
+                    }
+
+                    Divider(color = BorderColor, thickness = 0.5.dp)
+
                     // Enable/Disable Toggle
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                if (isPinEnabled) {
-                                    viewModel.removePin()
-                                    Toast.makeText(context, "Vault lock disabled.", Toast.LENGTH_SHORT).show()
+                                if (isAppLockActive) {
+                                    viewModel.toggleAppLock(false)
+                                    Toast.makeText(context, "App lock disabled.", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    showPinDialog = true
+                                    if (viewModel.prefs.isPinEnabled()) {
+                                        viewModel.toggleAppLock(true)
+                                        Toast.makeText(context, "App lock enabled.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        showPinDialog = true
+                                    }
                                 }
                             },
                         verticalAlignment = Alignment.CenterVertically,
@@ -310,33 +399,38 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = if (isPinEnabled) Icons.Default.Lock else Icons.Default.Security,
+                                imageVector = if (isAppLockActive) Icons.Default.Lock else Icons.Default.Security,
                                 contentDescription = null,
-                                tint = if (isPinEnabled) NeonCyan else SoftTextGray
+                                tint = if (isAppLockActive) NeonCyan else SoftTextGray
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    text = if (isPinEnabled) "Disable Vault Lock" else "Enable Vault Lock",
+                                    text = if (isAppLockActive) "Disable App Lock" else "Enable App Lock",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = if (isPinEnabled) "Turn off passcode protection" else "Secure your data with a 4-digit PIN",
+                                    text = if (isAppLockActive) "Passcode protection is active" else "Secure your data with a 4-digit PIN",
                                     color = SoftTextGray,
                                     fontSize = 11.sp
                                 )
                             }
                         }
                         Switch(
-                            checked = isPinEnabled,
+                            checked = isAppLockActive,
                             onCheckedChange = {
-                                if (isPinEnabled) {
-                                    viewModel.removePin()
-                                    Toast.makeText(context, "Vault lock disabled.", Toast.LENGTH_SHORT).show()
+                                if (isAppLockActive) {
+                                    viewModel.toggleAppLock(false)
+                                    Toast.makeText(context, "App lock disabled.", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    showPinDialog = true
+                                    if (viewModel.prefs.isPinEnabled()) {
+                                        viewModel.toggleAppLock(true)
+                                        Toast.makeText(context, "App lock enabled.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        showPinDialog = true
+                                    }
                                 }
                             },
                             colors = SwitchDefaults.colors(
@@ -346,7 +440,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         )
                     }
 
-                    if (isPinEnabled) {
+                    if (viewModel.prefs.isPinEnabled()) {
                         Divider(color = BorderColor, thickness = 0.5.dp)
                         Row(
                             modifier = Modifier
@@ -359,11 +453,22 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                                 Icon(Icons.Default.BugReport, null, tint = SoftTextGray) // Using an icon for 'Change'
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
-                                    Text("Change Vault PIN", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Change Security PIN", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("Update your security code", color = SoftTextGray, fontSize = 11.sp)
                                 }
                             }
                             Icon(Icons.Default.ChevronRight, null, tint = SoftTextGray)
+                        }
+
+                        // Option to clear PIN entirely
+                        TextButton(
+                            onClick = { 
+                                viewModel.removePin()
+                                Toast.makeText(context, "PIN removed and lock disabled.", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Text("Remove PIN Entirely", color = Color.Red.copy(alpha = 0.7f), fontSize = 12.sp)
                         }
                     }
                 }
@@ -371,7 +476,51 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // BACKUP JSON RECOVERY BLOCK
+            // SECURITY & ACCESS
+            Text(text = "SYSTEM & PERMISSIONS", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(CardBackgroundGlass)
+                    .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            val packageName = context.packageName
+                            val intent = Intent()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                intent.action = android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                                intent.data = android.net.Uri.parse("package:$packageName")
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error opening settings", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                    ) {
+                        Icon(Icons.Default.BatteryFull, null, tint = NeonGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("ALLOW BACKGROUND RUN (FIX POPUP)", color = Color.White)
+                    }
+                    
+                    Text(
+                        text = "Agar app background me band ho jati hai to ise 'Allow' karein. Isse baar-baar wala popup bhi nahi aayega.",
+                        color = SoftTextGray,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // CLOUD SYNC TERMINAL
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -389,6 +538,76 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         fontFamily = FontFamily.Monospace
                     )
 
+                    // Offline LLM Status
+                    val isLocalAiAvailable by viewModel.isLocalAiAvailable.collectAsState()
+                    val isImportingModel by viewModel.isImportingModel.collectAsState()
+                    val downloadProgress by viewModel.modelDownloadProgress.collectAsState()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bookmark,
+                            contentDescription = null,
+                            tint = if (isLocalAiAvailable) NeonGreen else if (downloadProgress != null || isImportingModel) NeonCyan else SoftTextGray
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Offline LLM Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                if (isLocalAiAvailable) "Model Loaded (Qwen 2.5)" 
+                                else if (isImportingModel) "Importing Model File..."
+                                else if (downloadProgress != null) "Downloading Model... ${(downloadProgress!! * 100).toInt()}%" 
+                                else "Model Missing: Required for Offline AI",
+                                color = if (isLocalAiAvailable) NeonGreen else if (downloadProgress != null || isImportingModel) NeonCyan else SoftTextGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                        
+                        if (!isLocalAiAvailable && downloadProgress == null && !isImportingModel) {
+                            Row {
+                                Button(
+                                    onClick = { viewModel.downloadOfflineModel() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("DOWNLOAD", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = { modelPickerLauncher.launch("*/*") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp).border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                                ) {
+                                    Text("SELECT FILE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else if (!isLocalAiAvailable && !isImportingModel) {
+                             // If model exists but is corrupted (hence isLocalAiAvailable is false)
+                             Button(
+                                 onClick = { viewModel.deleteModel() },
+                                 colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                                 modifier = Modifier.height(32.dp)
+                             ) {
+                                 Text("DELETE & RETRY", color = Color.White, fontSize = 10.sp)
+                             }
+                        }
+                    }
+                    
+                    if (downloadProgress != null) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress!! },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            color = NeonCyan,
+                            trackColor = Color.White.copy(alpha = 0.1f)
+                        )
+                    }
+
+                    Divider(color = BorderColor, thickness = 0.5.dp)
+
                     OutlinedTextField(
                         value = scriptUrlInput,
                         onValueChange = {
@@ -397,18 +616,47 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         },
                         label = { Text("Apps Script Web App URL", color = SoftTextGray) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = BorderColor,
+                            focusedBorderColor = if (isUrlValid) NeonCyan else Color.Red,
+                            unfocusedBorderColor = if (isUrlValid) BorderColor else Color.Red.copy(alpha = 0.5f),
                             focusedTextColor = Color.White,
                             unfocusedTextColor = Color.White
                         ),
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("https://script.google.com/macros/s/.../exec", fontSize = 11.sp) }
+                        placeholder = { Text("https://script.google.com/macros/s/.../exec", fontSize = 11.sp) },
+                        isError = !isUrlValid || isSpreadsheetUrl
+                    )
+
+                    if (isSpreadsheetUrl) {
+                        Text(
+                            text = "⚠️ Ye Spreadsheet URL hai! Aapko 'Apps Script' se 'Deploy as Web App' karke URL nikalna hoga.",
+                            color = Color.Yellow,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else if (!isUrlValid && scriptUrlInput.isNotBlank()) {
+                        Text(
+                            text = "❌ Invalid URL. Google Apps Script Web App URL (script.google.com) chahiye.",
+                            color = Color.Red,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    Text(
+                        text = "LAST SYNC STATUS:",
+                        color = SoftTextGray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = viewModel.lastSyncStatus.collectAsState().value ?: "Never synced",
+                        color = if (viewModel.lastSyncStatus.collectAsState().value?.contains("✅") == true) NeonGreen else if (viewModel.lastSyncStatus.collectAsState().value?.contains("❌") == true) NeonPink else Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
                     )
 
                     Button(
                         onClick = { viewModel.syncToGoogleSheets(scriptUrlInput) },
-                        enabled = !isSyncing && scriptUrlInput.isNotBlank(),
+                        enabled = !isSyncing && isUrlValid && scriptUrlInput.isNotBlank() && !isSpreadsheetUrl,
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -419,6 +667,58 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("SYNC TO GOOGLE SHEETS", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    var showSyncHelp by remember { mutableStateOf(false) }
+                    TextButton(onClick = { showSyncHelp = true }) {
+                        Text("❓ How to setup Google Sheets Sync?", color = NeonCyan, fontSize = 12.sp)
+                    }
+
+                    if (showSyncHelp) {
+                        AlertDialog(
+                            onDismissRequest = { showSyncHelp = false },
+                            title = { Text("How to Setup Sync", color = NeonCyan) },
+                            text = {
+                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                    Text(
+                                        text = "1. Google Sheet kholen.\n" +
+                                                "2. 'Extensions' -> 'Apps Script' pe jayen.\n" +
+                                                "3. Neeche wala code copy karke paste karein:\n\n" +
+                                                "function doPost(e) {\n" +
+                                                "  var data = JSON.parse(e.postData.contents);\n" +
+                                                "  var ss = SpreadsheetApp.getActiveSpreadsheet();\n\n" +
+                                                "  for (var key in data) {\n" +
+                                                "    var sheet = ss.getSheetByName(key) || ss.insertSheet(key);\n" +
+                                                "    sheet.clear(); // Fresh sync\n" +
+                                                "    var rows = data[key];\n" +
+                                                "    if (rows.length > 0) {\n" +
+                                                "      var headers = Object.keys(rows[0]);\n" +
+                                                "      sheet.appendRow(headers);\n" +
+                                                "      \n" +
+                                                "      // Formatting headers\n" +
+                                                "      sheet.getRange(1, 1, 1, headers.length).setBackground('#00E5FF').setFontWeight('bold');\n\n" +
+                                                "      var dataValues = rows.map(function(r) {\n" +
+                                                "        return headers.map(function(h) { return r[h]; });\n" +
+                                                "      });\n" +
+                                                "      sheet.getRange(2, 1, dataValues.length, headers.length).setValues(dataValues);\n" +
+                                                "    }\n" +
+                                                "  }\n" +
+                                                "  return ContentService.createTextOutput('Success');\n" +
+                                                "}\n\n" +
+                                                "4. 'Deploy' -> 'New Deployment' -> 'Web App'.\n" +
+                                                "5. 'Who has access' ko 'Anyone' karein.\n" +
+                                                "6. Deployment URL yahan paste karein.",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                Button(onClick = { showSyncHelp = false }) { Text("OK") }
+                            },
+                            containerColor = Color(0xFF1C1E32)
+                        )
                     }
 
                     if (syncStatus != null) {
@@ -465,4 +765,97 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
             }
         }
     }
+}
+
+@Composable
+fun SoundSelectionDialog(
+    onDismiss: () -> Unit,
+    onSelect: (Uri) -> Unit,
+    currentUri: String,
+    onCustomClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val ringtoneManager = RingtoneManager(context).apply {
+        setType(RingtoneManager.TYPE_NOTIFICATION)
+    }
+    
+    val cursor = ringtoneManager.cursor
+    val ringtones = remember {
+        val list = mutableListOf<Pair<String, Uri>>()
+        if (cursor != null && cursor.moveToFirst()) {
+            var count = 0
+            do {
+                val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                val uri = ringtoneManager.getRingtoneUri(cursor.position)
+                list.add(title to uri)
+                count++
+            } while (cursor.moveToNext() && count < 25)
+        }
+        list
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("SELECT NOTIFICATION TUNE", color = NeonCyan, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.heightIn(max = 400.dp)) {
+                Button(
+                    onClick = onCustomClick,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624))
+                ) {
+                    Icon(Icons.Default.Upload, null, tint = NeonCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("UPLOAD CUSTOM MP3/FILE", color = Color.White)
+                }
+                
+                Divider(color = BorderColor, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
+                
+                androidx.compose.foundation.lazy.LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(ringtones.size) { index ->
+                        val (title, uri) = ringtones[index]
+                        val isSelected = currentUri == uri.toString()
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) NeonCyan.copy(alpha = 0.2f) else Color.Transparent)
+                                .clickable { 
+                                    onSelect(uri)
+                                    // Play sound preview
+                                    try {
+                                        val r = RingtoneManager.getRingtone(context, uri)
+                                        r.play()
+                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                            if (r.isPlaying) r.stop()
+                                        }, 2000)
+                                    } catch (e: Exception) {}
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isSelected) Icons.Default.MusicNote else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (isSelected) NeonCyan else SoftTextGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(text = title, color = if (isSelected) NeonCyan else Color.White, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = SoftTextGray)
+            }
+        },
+        containerColor = Color(0xFF1C1E32)
+    )
 }

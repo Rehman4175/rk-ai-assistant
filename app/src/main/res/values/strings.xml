@@ -54,8 +54,6 @@
     <string name="nav_console_desc">AI console</string>
     <string name="nav_tasks">Tasks</string>
     <string name="nav_tasks_desc">Task details</string>
-    <string name="nav_vault">Vault</string>
-    <string name="nav_vault_desc">Note files vault</string>
     <string name="nav_system">System</string>
     <string name="nav_system_desc">App settings panel</string>
     <string name="ocr_image_error">Could not open selected image</string>

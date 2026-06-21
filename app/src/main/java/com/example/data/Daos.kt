@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
-    @Query("SELECT * FROM tasks ORDER BY isCompleted ASC, priority DESC, dueDate ASC")
+    @Query("SELECT * FROM tasks WHERE isDeleted = 0 ORDER BY isCompleted ASC, priority DESC, dueDate ASC")
     fun getAllTasks(): Flow<List<Task>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -23,14 +23,23 @@ interface TaskDao {
 
 @Dao
 interface ReminderDao {
-    @Query("SELECT * FROM reminders WHERE isAcknowledged = 0 ORDER BY dueDateTime ASC")
+    @Query("SELECT * FROM reminders WHERE isAcknowledged = 0 AND isDeleted = 0 ORDER BY dueDateTime ASC")
     fun getActiveReminders(): Flow<List<Reminder>>
 
-    @Query("SELECT * FROM reminders ORDER BY dueDateTime ASC")
+    @Query("SELECT * FROM reminders WHERE isDeleted = 0 ORDER BY dueDateTime ASC")
     fun getAllReminders(): Flow<List<Reminder>>
 
+    @Query("SELECT * FROM reminders ORDER BY createdAt DESC")
+    fun getFullHistory(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders")
+    suspend fun getAllRemindersList(): List<Reminder>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertReminder(reminder: Reminder)
+    suspend fun insertReminder(reminder: Reminder): Long
 
     @Update
     suspend fun updateReminder(reminder: Reminder)
@@ -41,8 +50,11 @@ interface ReminderDao {
 
 @Dao
 interface HabitDao {
-    @Query("SELECT * FROM habits")
+    @Query("SELECT * FROM habits WHERE isDeleted = 0")
     fun getAllHabits(): Flow<List<Habit>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHabit(habit: Habit)
@@ -56,14 +68,23 @@ interface HabitDao {
 
 @Dao
 interface WaterLogDao {
-    @Query("SELECT * FROM water_logs WHERE dayString = :dayString")
+    @Query("SELECT * FROM water_logs WHERE isDeleted = 0 ORDER BY timestamp DESC")
+    fun getAllLogs(): Flow<List<WaterLog>>
+
+    @Query("SELECT * FROM water_logs WHERE dayString = :dayString AND isDeleted = 0")
     fun getLogsByDay(dayString: String): Flow<List<WaterLog>>
 
-    @Query("SELECT SUM(mlAmount) FROM water_logs WHERE dayString = :dayString")
+    @Query("SELECT SUM(mlAmount) FROM water_logs WHERE dayString = :dayString AND isDeleted = 0")
     fun getWaterSumByDay(dayString: String): Flow<Int?>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(log: WaterLog)
+
+    @Update
+    suspend fun updateLog(log: WaterLog)
 
     @Query("DELETE FROM water_logs WHERE id = :id")
     suspend fun deleteLogById(id: Int)
@@ -71,8 +92,11 @@ interface WaterLogDao {
 
 @Dao
 interface ExpenseDao {
-    @Query("SELECT * FROM expenses ORDER BY dateString DESC, timestamp DESC")
+    @Query("SELECT * FROM expenses WHERE isDeleted = 0 ORDER BY dateString DESC, timestamp DESC")
     fun getAllExpenses(): Flow<List<Expense>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpense(expense: Expense)
@@ -89,8 +113,14 @@ interface ExpenseDao {
 
 @Dao
 interface BillDao {
-    @Query("SELECT * FROM bills ORDER BY dueDayOfMonth ASC")
+    @Query("SELECT * FROM bills WHERE isDeleted = 0 ORDER BY dueDayOfMonth ASC")
     fun getAllBills(): Flow<List<Bill>>
+
+    @Query("SELECT * FROM bills WHERE dueDayOfMonth = :day AND isDeleted = 0")
+    suspend fun getBillsByDay(day: Int): List<Bill>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBill(bill: Bill)
@@ -104,14 +134,20 @@ interface BillDao {
 
 @Dao
 interface CalendarEventDao {
-    @Query("SELECT * FROM calendar_events ORDER BY dateString ASC, timeString ASC")
+    @Query("SELECT * FROM calendar_events WHERE isDeleted = 0 ORDER BY dateString ASC, timeString ASC")
     fun getAllEvents(): Flow<List<CalendarEvent>>
 
-    @Query("SELECT * FROM calendar_events WHERE dateString = :dateString ORDER BY timeString ASC")
+    @Query("SELECT * FROM calendar_events WHERE dateString = :dateString AND isDeleted = 0 ORDER BY timeString ASC")
     fun getEventsByDay(dateString: String): Flow<List<CalendarEvent>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEvent(event: CalendarEvent)
+
+    @Update
+    suspend fun updateEvent(event: CalendarEvent)
 
     @Delete
     suspend fun deleteEvent(event: CalendarEvent)
@@ -119,11 +155,14 @@ interface CalendarEventDao {
 
 @Dao
 interface DiaryEntryDao {
-    @Query("SELECT * FROM diary_entries ORDER BY dateString DESC")
+    @Query("SELECT * FROM diary_entries WHERE isDeleted = 0 ORDER BY dateString DESC")
     fun getAllDiaryEntries(): Flow<List<DiaryEntry>>
 
     @Query("SELECT * FROM diary_entries WHERE dateString = :dateString LIMIT 1")
     suspend fun getEntryByDate(dateString: String): DiaryEntry?
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDiaryEntry(entry: DiaryEntry)
@@ -140,8 +179,14 @@ interface DiaryEntryDao {
 
 @Dao
 interface QuickNoteDao {
-    @Query("SELECT * FROM quick_notes ORDER BY isPinned DESC, timestamp DESC")
+    @Query("SELECT * FROM quick_notes WHERE isDeleted = 0 ORDER BY isPinned DESC, timestamp DESC")
     fun getAllNotes(): Flow<List<QuickNote>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNote(note: QuickNote)
@@ -158,8 +203,14 @@ interface QuickNoteDao {
 
 @Dao
 interface PersonalMemoryDao {
-    @Query("SELECT * FROM memories ORDER BY timestamp DESC")
+    @Query("SELECT * FROM memories WHERE isDeleted = 0 ORDER BY timestamp DESC")
     fun getAllMemories(): Flow<List<PersonalMemory>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMemory(memory: PersonalMemory)
@@ -182,6 +233,12 @@ interface ChatMessageDao {
     @Query("SELECT DISTINCT chatSessionId FROM chat_messages ORDER BY timestamp DESC")
     fun getChatSessions(): Flow<List<String>>
 
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessage)
 
@@ -191,11 +248,20 @@ interface ChatMessageDao {
 
 @Dao
 interface SmartReminderDao {
-    @Query("SELECT * FROM smart_reminders WHERE isAcknowledged = 0 ORDER BY dueDateTime ASC")
+    @Query("SELECT * FROM smart_reminders WHERE isAcknowledged = 0 AND isDeleted = 0 ORDER BY dueDateTime ASC")
     fun getActive(): Flow<List<SmartReminder>>
 
-    @Query("SELECT * FROM smart_reminders WHERE isAcknowledged = 0 ORDER BY dueDateTime ASC")
+    @Query("SELECT * FROM smart_reminders WHERE isAcknowledged = 0 AND isDeleted = 0 ORDER BY dueDateTime ASC")
     suspend fun getActiveList(): List<SmartReminder>
+
+    @Query("SELECT * FROM smart_reminders")
+    fun getAll(): Flow<List<SmartReminder>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSmartReminder(smartReminder: SmartReminder): Long
@@ -209,8 +275,14 @@ interface SmartReminderDao {
 
 @Dao
 interface VoiceNoteDao {
-    @Query("SELECT * FROM voice_notes ORDER BY timestamp DESC")
+    @Query("SELECT * FROM voice_notes WHERE isDeleted = 0 ORDER BY timestamp DESC")
     fun getAllVoiceNotes(): Flow<List<VoiceNote>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertVoiceNote(voiceNote: VoiceNote): Long
@@ -224,8 +296,14 @@ interface VoiceNoteDao {
 
 @Dao
 interface GoalDao {
-    @Query("SELECT * FROM goals ORDER BY isDone ASC, deadline ASC")
+    @Query("SELECT * FROM goals WHERE isDeleted = 0 ORDER BY isDone ASC, deadline ASC")
     fun getAllGoals(): Flow<List<Goal>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGoal(goal: Goal)
@@ -239,14 +317,23 @@ interface GoalDao {
 
 @Dao
 interface RecurringReminderDao {
-    @Query("SELECT * FROM recurring_reminders WHERE isActive = 1")
+    @Query("SELECT * FROM recurring_reminders WHERE isActive = 1 AND isDeleted = 0")
     fun getActiveRecurringReminders(): Flow<List<RecurringReminder>>
 
-    @Query("SELECT * FROM recurring_reminders")
+    @Query("SELECT * FROM recurring_reminders WHERE isDeleted = 0")
     fun getAll(): Flow<List<RecurringReminder>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(recurringReminder: RecurringReminder)
+
+    @Update
+    suspend fun update(recurringReminder: RecurringReminder)
 
     @Delete
     suspend fun delete(recurringReminder: RecurringReminder)
@@ -254,11 +341,17 @@ interface RecurringReminderDao {
 
 @Dao
 interface RemindLinkDao {
-    @Query("SELECT * FROM remind_links WHERE isAcknowledged = 0 ORDER BY dueDateTime ASC")
+    @Query("SELECT * FROM remind_links WHERE isAcknowledged = 0 AND isDeleted = 0 ORDER BY dueDateTime ASC")
     fun getPendingLinks(): Flow<List<RemindLink>>
 
-    @Query("SELECT * FROM remind_links")
+    @Query("SELECT * FROM remind_links WHERE isDeleted = 0")
     fun getAllLinks(): Flow<List<RemindLink>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLink(link: RemindLink)
@@ -272,8 +365,14 @@ interface RemindLinkDao {
 
 @Dao
 interface PrivateSpaceItemDao {
-    @Query("SELECT * FROM private_space_items ORDER BY modifiedAt DESC")
+    @Query("SELECT * FROM private_space_items WHERE isDeleted = 0 ORDER BY modifiedAt DESC")
     fun getAllItems(): Flow<List<PrivateSpaceItem>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun getReminderById(id: Int): Reminder?
+
+    @Query("SELECT * FROM smart_reminders WHERE id = :id")
+    suspend fun getById(id: Int): SmartReminder?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItem(item: PrivateSpaceItem)

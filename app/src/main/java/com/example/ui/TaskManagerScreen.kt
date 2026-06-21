@@ -58,9 +58,9 @@ fun TaskManagerScreen(viewModel: AssistantViewModel) {
     var selectedTab by remember { mutableStateOf("Pending") }
 
     val filteredTasks = when (selectedTab) {
-        "Pending" -> tasksList.filter { !it.isCompleted }
-        "Completed" -> tasksList.filter { it.isCompleted }
-        else -> tasksList
+        "Pending" -> tasksList.filter { !it.isCompleted && !it.isDeleted }
+        "Completed" -> tasksList.filter { it.isCompleted && !it.isDeleted }
+        else -> tasksList.filter { !it.isDeleted }
     }
 
     Box(
@@ -341,7 +341,7 @@ fun TaskCard(
 
                 Column {
                     Text(
-                        text = task.title,
+                        text = "#${task.id} ${task.title}",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (task.isCompleted) SoftTextGray else Color.White,
