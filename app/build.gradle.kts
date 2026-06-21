@@ -44,7 +44,7 @@ android {
     }
 
     buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
-    buildConfigField("String", "WEATHER_API_KEY", "\"${getSecret("WEATHER_API_KEY", "eb648074c6530a6e0d37e69f82635416")}\"")
+    buildConfigField("String", "WEATHER_API_KEY", "\"${getSecret("WEATHER_API_KEY")}\"")
   }
 
   signingConfigs {

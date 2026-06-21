@@ -453,9 +453,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 localResult
             } else {
                 var aiRes: String? = null
-            if (isOnline.value && isNetworkAvailable() && GeminiService.isApiKeyConfigured()) {
-                aiRes = GeminiService.chat(text, "You are RK, a helpful personal assistant. Introduce yourself as 'Main RK, aapka personal voice assistant hoon'. Speak in natural, polite Hindi/Hinglish.")
-            }
+                if (isOnline.value && isNetworkAvailable() && GeminiService.isApiKeyConfigured()) {
+                    aiRes = GeminiService.chat(
+                        text, 
+                        "You are RK, a helpful personal assistant. Introduce yourself as 'Main RK, aapka personal voice assistant hoon'. Speak in natural, polite Hindi/Hinglish.",
+                        onError = { errorMsg ->
+                            viewModelScope.launch(Dispatchers.Main) {
+                                Toast.makeText(getApplication(), errorMsg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
                 aiRes ?: LocalLLMService.generateResponse(text, getApplication())
             }
             
@@ -814,7 +822,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 GeminiService.chat(
                     prompt = userPrompt,
                     systemInstruction = systemContext,
-                    chatHistory = chatMessages.value.dropLast(1)
+                    chatHistory = chatMessages.value.dropLast(1),
+                    onError = { errorMsg ->
+                        viewModelScope.launch(Dispatchers.Main) {
+                            Toast.makeText(getApplication(), errorMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 ) ?: (if (isLocalAiAvailable.value) LocalLLMService.generateResponse(userPrompt, getApplication()) else null)
             } else if (isLocalAiAvailable.value) {
                 LocalLLMService.generateResponse("System: You are RK AI. User asks: $userPrompt", getApplication())

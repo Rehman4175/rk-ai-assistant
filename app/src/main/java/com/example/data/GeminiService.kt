@@ -105,10 +105,12 @@ object GeminiService {
     suspend fun chat(
         prompt: String,
         systemInstruction: String = "You are RK, a smart and friendly personal AI assistant. Be helpful, concise and conversational.",
-        chatHistory: List<ChatMessage> = emptyList()
+        chatHistory: List<ChatMessage> = emptyList(),
+        onError: ((String) -> Unit)? = null
     ): String? {
         val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
         if (!isApiKeyConfigured()) {
+            onError?.invoke("API Key not configured.")
             return null
         }
 
@@ -134,16 +136,23 @@ object GeminiService {
                 response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                     ?: "No response from AI."
             } else {
-                // Return null on error codes to trigger fallback in ViewModel
+                val errorMsg = when (response.code()) {
+                    429 -> "Maaf kijiyega Boss, API limit khatam ho gayi hai. (429 Error)"
+                    401, 403 -> "API Key sahi nahi hai ya expire ho gayi hai. (401/403 Error)"
+                    500, 503 -> "Google servers mein takleef hai. (500/503 Error)"
+                    else -> "Anjaan error aaya hai. (Code: ${response.code()})"
+                }
+                onError?.invoke(errorMsg)
                 null
             }
         } catch (e: UnknownHostException) {
+            onError?.invoke("Internet connection nahi hai.")
             null
         } catch (e: SocketTimeoutException) {
-            null
-        } catch (e: SSLException) {
+            onError?.invoke("Request timed out.")
             null
         } catch (e: Exception) {
+            onError?.invoke("Kuch gadbad ho gayi: ${e.localizedMessage}")
             null
         }
     }
