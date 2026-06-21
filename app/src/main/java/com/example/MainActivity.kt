@@ -58,41 +58,25 @@ class MainActivity : FragmentActivity() {
             MyApplicationTheme {
                 val isLocked by viewModel.isLocked.collectAsState()
 
-                // Request Notification Permission for Android 13+
+                // Request Notification and Location Permissions
                 val context = LocalContext.current
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.RequestPermission()
-                ) { isGranted ->
-                    if (!isGranted) {
-                        Toast.makeText(context, "Notification permission is required for reminders!", Toast.LENGTH_LONG).show()
+                val permissionsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { permissions ->
+                    val notificationsGranted = permissions[Manifest.permission.POST_NOTIFICATIONS] ?: false
+                    if (!notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        Toast.makeText(context, "Notification permission recommended for reminders!", Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 LaunchedEffect(Unit) {
-                    // Force permission request on start
+                    val perms = mutableListOf<String>()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
                     }
-                    
-                    // Request Ignore Battery Optimizations for background reliability
-                    // Moved to settings to avoid repeated popups on every start
-                    /*
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        val packageName = context.packageName
-                        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                        if (!pm.isIgnoringBatteryOptimizations(packageName) && !viewModel.prefs.isBatteryOptimizedPromptShown()) {
-                            val intent = Intent()
-                            intent.action = android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                            intent.data = Uri.parse("package:$packageName")
-                            try {
-                                viewModel.prefs.setBatteryOptimizedPromptShown(true)
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        }
-                    }
-                    */
+                    perms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    permissionsLauncher.launch(perms.toTypedArray())
                 }
 
                 // Auto-lock on background
@@ -100,7 +84,6 @@ class MainActivity : FragmentActivity() {
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_STOP) {
-                            // Lock the app when it goes to background
                             if (viewModel.prefs.isAppLockActive() && viewModel.prefs.isPinEnabled()) {
                                 viewModel.isLocked.value = true
                             }
@@ -157,7 +140,6 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 containerColor = Color(0xFF10121F),
                 tonalElevation = 8.dp
             ) {
-                // Bottom Item: Dashboard
                 NavigationBarItem(
                     selected = currentScreen == AppScreen.Dashboard,
                     onClick = { viewModel.navigateTo(AppScreen.Dashboard) },
@@ -171,7 +153,6 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     }
                 )
 
-                // Bottom Item: Chat console
                 NavigationBarItem(
                     selected = currentScreen == AppScreen.Chat,
                     onClick = { viewModel.navigateTo(AppScreen.Chat) },
@@ -185,7 +166,6 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     }
                 )
 
-                // Bottom Item: Tasks log
                 NavigationBarItem(
                     selected = currentScreen == AppScreen.Tasks,
                     onClick = { viewModel.navigateTo(AppScreen.Tasks) },
@@ -199,7 +179,6 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     }
                 )
 
-                // Bottom Item: History & Timeline
                 NavigationBarItem(
                     selected = currentScreen == AppScreen.History,
                     onClick = { viewModel.navigateTo(AppScreen.History) },
@@ -213,7 +192,6 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     }
                 )
 
-                // Bottom Item: Universal Engine search & utilities
                 NavigationBarItem(
                     selected = currentScreen == AppScreen.Settings || currentScreen == AppScreen.Search,
                     onClick = { viewModel.navigateTo(AppScreen.Settings) },
@@ -234,29 +212,30 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Screen router
             when (currentScreen) {
                 AppScreen.Dashboard -> DashboardScreen(viewModel) { screenName ->
                     try {
                         val parsed = AppScreen.valueOf(screenName.replaceFirstChar { it.uppercaseChar() })
                         viewModel.navigateTo(parsed)
                     } catch (e: Exception) {
-                        if (screenName.equals("water", ignoreCase = true)) viewModel.navigateTo(AppScreen.Water)
-                        if (screenName.equals("notes", ignoreCase = true)) viewModel.navigateTo(AppScreen.Notes)
-                        if (screenName.equals("expenses", ignoreCase = true)) viewModel.navigateTo(AppScreen.Expenses)
-                        if (screenName.equals("reminders", ignoreCase = true)) viewModel.navigateTo(AppScreen.Reminders)
-                        if (screenName.equals("habits", ignoreCase = true)) viewModel.navigateTo(AppScreen.Habits)
-                        if (screenName.equals("bills", ignoreCase = true)) viewModel.navigateTo(AppScreen.Bills)
-                        if (screenName.equals("diary", ignoreCase = true)) viewModel.navigateTo(AppScreen.Diary)
-                        if (screenName.equals("calendar", ignoreCase = true)) viewModel.navigateTo(AppScreen.Calendar)
-                        if (screenName.equals("search", ignoreCase = true)) viewModel.navigateTo(AppScreen.Search)
-                        if (screenName.equals("smartreminders", ignoreCase = true)) viewModel.navigateTo(AppScreen.SmartReminders)
-                        if (screenName.equals("voicenotes", ignoreCase = true)) viewModel.navigateTo(AppScreen.VoiceNotes)
-                        if (screenName.equals("weeklyreview", ignoreCase = true)) viewModel.navigateTo(AppScreen.WeeklyReview)
-                        if (screenName.equals("goals", ignoreCase = true)) viewModel.navigateTo(AppScreen.Goals)
-                        if (screenName.equals("recurring", ignoreCase = true)) viewModel.navigateTo(AppScreen.RecurringReminders)
-                        if (screenName.equals("links", ignoreCase = true)) viewModel.navigateTo(AppScreen.RemindLinks)
-                        if (screenName.equals("private", ignoreCase = true)) viewModel.navigateTo(AppScreen.PrivateSpace)
+                        when (screenName.lowercase()) {
+                            "water" -> viewModel.navigateTo(AppScreen.Water)
+                            "notes" -> viewModel.navigateTo(AppScreen.Notes)
+                            "expenses" -> viewModel.navigateTo(AppScreen.Expenses)
+                            "reminders" -> viewModel.navigateTo(AppScreen.Reminders)
+                            "habits" -> viewModel.navigateTo(AppScreen.Habits)
+                            "bills" -> viewModel.navigateTo(AppScreen.Bills)
+                            "diary" -> viewModel.navigateTo(AppScreen.Diary)
+                            "calendar" -> viewModel.navigateTo(AppScreen.Calendar)
+                            "search" -> viewModel.navigateTo(AppScreen.Search)
+                            "smartreminders" -> viewModel.navigateTo(AppScreen.SmartReminders)
+                            "voicenotes" -> viewModel.navigateTo(AppScreen.VoiceNotes)
+                            "weeklyreview" -> viewModel.navigateTo(AppScreen.WeeklyReview)
+                            "goals" -> viewModel.navigateTo(AppScreen.Goals)
+                            "recurring" -> viewModel.navigateTo(AppScreen.RecurringReminders)
+                            "links" -> viewModel.navigateTo(AppScreen.RemindLinks)
+                            "private" -> viewModel.navigateTo(AppScreen.PrivateSpace)
+                        }
                     }
                 }
                 AppScreen.Chat -> ChatScreen(viewModel)

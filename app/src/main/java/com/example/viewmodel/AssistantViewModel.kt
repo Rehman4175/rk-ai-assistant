@@ -12,12 +12,17 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.location.Location
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
 import android.widget.Toast
 import com.example.data.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +40,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val db = AppDatabase.getDatabase(application)
     private val repository = DatabaseRepository(db)
     val prefs = SecurePrefHelper(application)
+    private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
 
     // Current Screen
     val currentScreen = MutableStateFlow(AppScreen.Dashboard)
@@ -178,11 +184,36 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val backupDataJson = MutableStateFlow("")
 
     private suspend fun updateWeather() {
-        // OpenWeatherMap API Key - In production this should be in BuildConfig/Secrets
+        // OpenWeatherMap Free API Key
         val weatherKey = "eb648074c6530a6e0d37e69f82635416" 
-        // Default to Mumbai coordinates if location permission not handled yet
-        val lat = 19.0760
-        val lon = 72.8777
+        
+        var lat = 19.0760 // Default Mumbai
+        var lon = 72.8777
+
+        // Attempt to get real location
+        try {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                getApplication(), android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                
+                val location: Location? = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                    try {
+                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                            .addOnSuccessListener { loc -> continuation.resume(loc) { } }
+                            .addOnFailureListener { e -> continuation.resume(null) { } }
+                    } catch (e: Exception) {
+                        continuation.resume(null) { }
+                    }
+                }
+                
+                if (location != null) {
+                    lat = location.latitude
+                    lon = location.longitude
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         
         val result = GeminiService.fetchWeather(lat, lon, weatherKey)
         if (result != "Weather Error" && result != "Weather unavailable") {
