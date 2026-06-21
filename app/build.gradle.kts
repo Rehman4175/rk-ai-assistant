@@ -19,9 +19,32 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    // ✅ FIX: Added BuildConfig field for Gemini API Key - checking both properties and environment
-    val apiKey: String = (project.findProperty("GEMINI_API_KEY") ?: System.getenv("GEMINI_API_KEY") ?: "").toString()
-    buildConfigField("String", "GEMINI_API_KEY", "\"$apiKey\"")
+    // ✅ FIX: Load keys from local.properties, env, or .env file manually as fallback
+    fun getSecret(key: String, default: String = ""): String {
+        val projectProp = project.findProperty(key)?.toString()
+        if (!projectProp.isNullOrBlank()) return projectProp
+        
+        val envVar = System.getenv(key)
+        if (!envVar.isNullOrBlank()) return envVar
+        
+        // Manual .env fallback if others fail (sometimes secrets plugin is picky in IDE)
+        try {
+            val envFile = file("${rootDir}/.env")
+            if (envFile.exists()) {
+                val lines = envFile.readLines()
+                for (line in lines) {
+                    if (line.startsWith("${key}=")) {
+                        return line.substringAfter("=").trim('"').trim('\'')
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        
+        return default
+    }
+
+    buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
+    buildConfigField("String", "WEATHER_API_KEY", "\"${getSecret("WEATHER_API_KEY", "eb648074c6530a6e0d37e69f82635416")}\"")
   }
 
   signingConfigs {

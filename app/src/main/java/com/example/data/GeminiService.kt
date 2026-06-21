@@ -130,24 +130,12 @@ object GeminiService {
             val response = geminiApi.generateContent(apiKey, request)
 
             // ✅ FIX: Proper response handling
-            when {
-                response.isSuccessful -> {
-                    response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                        ?: "No response from AI."
-                }
-                response.code() == 429 -> {
-                    // ✅ FIX: Better 429 error message with retry suggestion
-                    "Maaf kijiyega Boss, API limit khatam ho gayi hai. Thodi der baad try karein (429 Error)."
-                }
-                response.code() == 401 || response.code() == 403 -> {
-                    "API Key sahi nahi hai ya expire ho gayi hai (401/403 Error)."
-                }
-                response.code() == 500 || response.code() == 503 -> {
-                    "Google ke servers mein kuch takleef hai, thodi der mein theek ho jayega (500/503 Error)."
-                }
-                else -> {
-                    "Kuch anjaan error aaya hai (Code: ${response.code()})."
-                }
+            if (response.isSuccessful) {
+                response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    ?: "No response from AI."
+            } else {
+                // Return null on error codes to trigger fallback in ViewModel
+                null
             }
         } catch (e: UnknownHostException) {
             null

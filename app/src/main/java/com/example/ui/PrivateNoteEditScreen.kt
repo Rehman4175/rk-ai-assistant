@@ -63,7 +63,7 @@ fun PrivateNoteEditScreen(viewModel: AssistantViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { 
-                viewModel.currentScreen.value = AppScreen.PrivateSpace 
+                viewModel.navigateBack()
                 viewModel.editingPrivateItem.value = null
             }) {
                 Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
@@ -86,7 +86,7 @@ fun PrivateNoteEditScreen(viewModel: AssistantViewModel) {
                             ))
                         }
                     }
-                    viewModel.currentScreen.value = AppScreen.PrivateSpace
+                    viewModel.navigateBack()
                     viewModel.editingPrivateItem.value = null
                 }) {
                     Icon(Icons.Default.Check, "Save", tint = NeonPurple)

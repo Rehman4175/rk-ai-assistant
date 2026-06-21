@@ -155,7 +155,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Label: ${task.label} • Priority: ${task.priority}",
                             categoryColor = NeonCyan,
                             icon = Icons.Default.FormatListNumbered,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Tasks }
+                            onClick = { viewModel.navigateTo(AppScreen.Tasks) }
                         )
                     }
                 }
@@ -171,7 +171,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Priority: ${rem.priority} • Repeat Interval: ${rem.repeatIntervalMinutes}m",
                             categoryColor = Color(0xFFE040FB),
                             icon = Icons.Default.NotificationsActive,
-                            onClick = { viewModel.currentScreen.value = AppScreen.SmartReminders }
+                            onClick = { viewModel.navigateTo(AppScreen.SmartReminders) }
                         )
                     }
                 }
@@ -187,7 +187,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "One-time alert • Status: Active",
                             categoryColor = Color(0xFF9575CD),
                             icon = Icons.Default.Notifications,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Reminders }
+                            onClick = { viewModel.navigateTo(AppScreen.Reminders) }
                         )
                     }
                 }
@@ -203,7 +203,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = if (note.content.length > 80) note.content.take(80) + "..." else note.content,
                             categoryColor = NeonPink,
                             icon = Icons.Default.Bookmark,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Notes }
+                            onClick = { viewModel.navigateTo(AppScreen.Notes) }
                         )
                     }
                 }
@@ -219,7 +219,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Amount: Rs ${ex.amount} • Category: ${ex.category} • ${if (ex.isIncome) "Income" else "Expense"}",
                             categoryColor = Color(0xFFFF9100),
                             icon = Icons.Default.TrendingDown,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Expenses }
+                            onClick = { viewModel.navigateTo(AppScreen.Expenses) }
                         )
                     }
                 }
@@ -235,7 +235,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Due: ${event.dateString} at ${event.timeString} • Location: ${event.location}",
                             categoryColor = NeonGreen,
                             icon = Icons.Default.EventNote,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Calendar }
+                            onClick = { viewModel.navigateTo(AppScreen.Calendar) }
                         )
                     }
                 }
@@ -251,7 +251,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = if (entry.text.length > 80) entry.text.take(80) + "..." else entry.text,
                             categoryColor = Color(0xFF00E5FF),
                             icon = Icons.Default.MenuBook,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Diary }
+                            onClick = { viewModel.navigateTo(AppScreen.Diary) }
                         )
                     }
                 }
@@ -267,7 +267,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Amount: Rs ${bill.amount} • Due Day of Month: ${bill.dueDayOfMonth}",
                             categoryColor = Color(0xFFFFD600),
                             icon = Icons.Default.ReceiptLong,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Bills }
+                            onClick = { viewModel.navigateTo(AppScreen.Bills) }
                         )
                     }
                 }
@@ -283,7 +283,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = "Type: ${habit.type} • Streak: ${habit.streakCount} days",
                             categoryColor = Color(0xFF1DE9B6),
                             icon = Icons.Default.DirectionsRun,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Habits }
+                            onClick = { viewModel.navigateTo(AppScreen.Habits) }
                         )
                     }
                 }
@@ -299,7 +299,7 @@ fun SearchScreen(viewModel: AssistantViewModel) {
                             desc = memory.content,
                             categoryColor = Color(0xFFFF5252),
                             icon = Icons.Default.Psychology,
-                            onClick = { viewModel.currentScreen.value = AppScreen.Dashboard }
+                            onClick = { viewModel.navigateTo(AppScreen.Dashboard) }
                         )
                     }
                 }

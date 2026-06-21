@@ -3,6 +3,7 @@ package com.example.viewmodel
 import java.io.InputStream
 import java.io.OutputStream
 import android.app.Application
+import com.example.BuildConfig
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -184,8 +185,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val backupDataJson = MutableStateFlow("")
 
     private suspend fun updateWeather() {
-        // OpenWeatherMap Free API Key
-        val weatherKey = "eb648074c6530a6e0d37e69f82635416" 
+        // OpenWeatherMap API Key from BuildConfig
+        val weatherKey = try { BuildConfig.WEATHER_API_KEY } catch (e: Exception) { "" }
+        if (weatherKey.isBlank()) return
         
         var lat = 19.0760 // Default Mumbai
         var lon = 72.8777

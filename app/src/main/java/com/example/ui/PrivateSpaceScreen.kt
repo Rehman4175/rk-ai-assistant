@@ -146,7 +146,7 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
             FloatingActionButton(
                 onClick = { 
                     viewModel.editingPrivateItem.value = null
-                    viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
+                    viewModel.navigateTo(AppScreen.PrivateNoteEdit)
                 },
                 containerColor = NeonPurple,
                 contentColor = Color.Black
@@ -197,7 +197,7 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                     items(pinnedItems) { item ->
                         PrivateItemCard(item, viewModel) {
                             viewModel.editingPrivateItem.value = item
-                            viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
+                            viewModel.navigateTo(AppScreen.PrivateNoteEdit)
                         }
                     }
                     item(span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
@@ -208,7 +208,7 @@ fun PrivateSpaceScreen(viewModel: AssistantViewModel) {
                 items(otherItems) { item ->
                     PrivateItemCard(item, viewModel) {
                         viewModel.editingPrivateItem.value = item
-                        viewModel.currentScreen.value = AppScreen.PrivateNoteEdit
+                        viewModel.navigateTo(AppScreen.PrivateNoteEdit)
                     }
                 }
 
