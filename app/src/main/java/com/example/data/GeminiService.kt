@@ -6,6 +6,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -333,46 +334,60 @@ object GoogleSheetsService {
 
     suspend fun sync(jsonPayload: String, scriptUrl: String): Boolean {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val mediaType = "application/json".toMediaType()
+            var currentUrl = scriptUrl
+            var redirectCount = 0
+            val maxRedirects = 5
+
             try {
-                val mediaType = "application/json".toMediaType()
-                
-                // Create a repeatable RequestBody
-                val body = jsonPayload.toRequestBody(mediaType)
-                
-                // Google Sheets Web App requires FOLLOWING redirects (302) but with the SAME method (POST).
-                // OkHttp's followRedirects(true) often converts 302 POST to GET.
-                // We handle this by using a client with auto-redirect DISABLED and handling it manually.
-                val manualRedirectClient = okHttpClient.newBuilder()
+                // Use a client that doesn't auto-handle redirects because we need to preserve POST body
+                val client = okHttpClient.newBuilder()
                     .followRedirects(false)
                     .followSslRedirects(false)
                     .build()
 
-                val request = okhttp3.Request.Builder()
-                    .url(scriptUrl)
-                    .post(body)
-                    .build()
+                var response: okhttp3.Response? = null
 
-                var response = manualRedirectClient.newCall(request).execute()
-                
-                // If it's a redirect (GAS almost always returns 302 for successful POST)
-                if (response.code == 302 || response.code == 301 || response.code == 307 || response.code == 308) {
-                    val redirectUrl = response.header("Location")
-                    response.close()
+                while (redirectCount < maxRedirects) {
+                    val request = okhttp3.Request.Builder()
+                        .url(currentUrl)
+                        .header("User-Agent", "RK-AI-Assistant-Android")
+                        .post(jsonPayload.toRequestBody(mediaType))
+                        .build()
+
+                    val nextResponse = client.newCall(request).execute()
                     
-                    if (redirectUrl != null) {
-                        // Re-create the request to the new URL with the original body
-                        val redirectRequest = okhttp3.Request.Builder()
-                            .url(redirectUrl)
-                            .post(jsonPayload.toRequestBody(mediaType)) // Fresh body to be safe
-                            .build()
-                        response = manualRedirectClient.newCall(redirectRequest).execute()
+                    // If it's a redirect (301, 302, 303, 307, 308)
+                    if (nextResponse.code in 300..308) {
+                        val location = nextResponse.header("Location")
+                        nextResponse.close()
+                        if (location != null) {
+                            // Resolve relative URLs if necessary
+                            currentUrl = if (location.startsWith("http")) {
+                                location
+                            } else {
+                                currentUrl.toHttpUrl().resolve(location)?.toString() ?: location
+                            }
+                            redirectCount++
+                            continue
+                        }
                     }
+                    
+                    response = nextResponse
+                    break
                 }
 
+                if (response == null) return@withContext false
+
                 val responseBody = response.body?.string() ?: ""
-                val isSuccess = response.isSuccessful || responseBody.contains("Success", ignoreCase = true)
+                val code = response.code
                 response.close()
-                isSuccess
+
+                println("Sync Result - Code: $code, Body: $responseBody")
+
+                // Success if code is 200 and body contains "Success"
+                // Or if it's still a redirect but we hit the limit (sometimes GAS acts weird)
+                code == 200 && responseBody.contains("Success", ignoreCase = true)
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
