@@ -335,25 +335,37 @@ object GoogleSheetsService {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val mediaType = "application/json".toMediaType()
+                
+                // Create a repeatable RequestBody
                 val body = jsonPayload.toRequestBody(mediaType)
                 
+                // Google Sheets Web App requires FOLLOWING redirects (302) but with the SAME method (POST).
+                // OkHttp's followRedirects(true) often converts 302 POST to GET.
+                // We handle this by using a client with auto-redirect DISABLED and handling it manually.
+                val manualRedirectClient = okHttpClient.newBuilder()
+                    .followRedirects(false)
+                    .followSslRedirects(false)
+                    .build()
+
                 val request = okhttp3.Request.Builder()
                     .url(scriptUrl)
                     .post(body)
                     .build()
 
-                var response = okHttpClient.newCall(request).execute()
+                var response = manualRedirectClient.newCall(request).execute()
                 
-                // Manual Redirect Handling for Google Apps Script (302 Found)
+                // If it's a redirect (GAS almost always returns 302 for successful POST)
                 if (response.code == 302 || response.code == 301 || response.code == 307 || response.code == 308) {
-                    val newUrl = response.header("Location")
-                    if (newUrl != null) {
-                        response.close()
+                    val redirectUrl = response.header("Location")
+                    response.close()
+                    
+                    if (redirectUrl != null) {
+                        // Re-create the request to the new URL with the original body
                         val redirectRequest = okhttp3.Request.Builder()
-                            .url(newUrl)
-                            .post(body) // Re-post the body to the redirected URL
+                            .url(redirectUrl)
+                            .post(jsonPayload.toRequestBody(mediaType)) // Fresh body to be safe
                             .build()
-                        response = okHttpClient.newCall(redirectRequest).execute()
+                        response = manualRedirectClient.newCall(redirectRequest).execute()
                     }
                 }
 

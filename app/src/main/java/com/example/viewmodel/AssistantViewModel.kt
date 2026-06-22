@@ -1252,8 +1252,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             val root = JSONObject()
             
-            // Collect all data from flows
-            root.put("tasks", JSONArray(tasks.value.map { t ->
+            // Collect all data directly from repository (Flow.first() ensures a fresh DB read)
+            root.put("tasks", JSONArray(repository.allTasks.first().map { t ->
                 JSONObject().apply {
                     put("title", t.title); put("isCompleted", t.isCompleted); put("priority", t.priority)
                     put("label", t.label); put("dueDate", t.dueDate); put("notes", t.notes)
@@ -1263,7 +1263,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
             
-            root.put("reminders", JSONArray(reminders.value.map { r ->
+            root.put("reminders", JSONArray(repository.allReminders.first().map { r ->
                 JSONObject().apply {
                     put("title", r.title); put("dueDateTime", r.dueDateTime); put("recurrence", r.recurrence)
                     put("isAcknowledged", r.isAcknowledged); put("createdAt", r.createdAt)
@@ -1272,7 +1272,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
             
-            root.put("expenses", JSONArray(expenses.value.map { e ->
+            root.put("expenses", JSONArray(repository.allExpenses.first().map { e ->
                 JSONObject().apply {
                     put("amount", e.amount); put("title", e.title); put("isIncome", e.isIncome)
                     put("category", e.category); put("dateString", e.dateString); put("timestamp", e.timestamp)
@@ -1280,7 +1280,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("habits", JSONArray(habits.value.map { h ->
+            root.put("habits", JSONArray(repository.allHabits.first().map { h ->
                 JSONObject().apply {
                     put("name", h.name); put("type", h.type); put("emoji", h.emoji)
                     put("loggedDaysCommaSeparated", h.loggedDaysCommaSeparated)
@@ -1290,14 +1290,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("waterLogs", JSONArray(waterLogs.value.map { w ->
+            // Use all water logs for full backup
+            root.put("waterLogs", JSONArray(db.waterLogDao().getAllLogs().first().map { w ->
                 JSONObject().apply {
                     put("mlAmount", w.mlAmount); put("timestamp", w.timestamp)
                     put("dayString", w.dayString); put("isDeleted", w.isDeleted); put("remarks", w.remarks)
                 }
             }))
 
-            root.put("bills", JSONArray(bills.value.map { b ->
+            root.put("bills", JSONArray(repository.allBills.first().map { b ->
                 JSONObject().apply {
                     put("name", b.name); put("amount", b.amount); put("category", b.category)
                     put("dueDayOfMonth", b.dueDayOfMonth); put("paidMonthsCommaSeparated", b.paidMonthsCommaSeparated)
@@ -1306,7 +1307,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("events", JSONArray(events.value.map { v ->
+            root.put("events", JSONArray(repository.allEvents.first().map { v ->
                 JSONObject().apply {
                     put("title", v.title); put("dateString", v.dateString); put("timeString", v.timeString)
                     put("location", v.location); put("notes", v.notes); put("type", v.type)
@@ -1315,7 +1316,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("diaryEntries", JSONArray(diaryEntries.value.map { d ->
+            root.put("diaryEntries", JSONArray(repository.allDiaryEntries.first().map { d ->
                 JSONObject().apply {
                     put("dateString", d.dateString); put("text", d.text); put("mood", d.mood)
                     put("photoPath", d.photoPath); put("timestamp", d.timestamp); put("isDeleted", d.isDeleted)
@@ -1323,7 +1324,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("notes", JSONArray(notes.value.map { n ->
+            root.put("notes", JSONArray(repository.allNotes.first().map { n ->
                 JSONObject().apply {
                     put("title", n.title); put("content", n.content); put("isPinned", n.isPinned)
                     put("isFavorite", n.isFavorite); put("timestamp", n.timestamp); put("tag", n.tag)
@@ -1331,14 +1332,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("memories", JSONArray(memories.value.map { m ->
+            root.put("memories", JSONArray(repository.allMemories.first().map { m ->
                 JSONObject().apply {
                     put("content", m.content); put("category", m.category); put("timestamp", m.timestamp)
                     put("isDeleted", m.isDeleted); put("remarks", m.remarks)
                 }
             }))
 
-            root.put("smartReminders", JSONArray(smartReminders.value.map { s ->
+            // Use all smart reminders
+            root.put("smartReminders", JSONArray(db.smartReminderDao().getAll().first().map { s ->
                 JSONObject().apply {
                     put("title", s.title); put("dueDateTime", s.dueDateTime); put("priority", s.priority)
                     put("repeatIntervalMinutes", s.repeatIntervalMinutes); put("maxRepeats", s.maxRepeats)
@@ -1347,7 +1349,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("voiceNotes", JSONArray(voiceNotes.value.map { v ->
+            root.put("voiceNotes", JSONArray(repository.allVoiceNotes.first().map { v ->
                 JSONObject().apply {
                     put("filePath", v.filePath); put("transcription", v.transcription); put("duration", v.duration)
                     put("timestamp", v.timestamp); put("isTranscribed", v.isTranscribed); put("status", v.status)
@@ -1355,7 +1357,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("goals", JSONArray(goals.value.map { g ->
+            root.put("goals", JSONArray(repository.allGoals.first().map { g ->
                 JSONObject().apply {
                     put("title", g.title); put("progress", g.progress); put("isDone", g.isDone)
                     put("deadline", g.deadline); put("createdAt", g.createdAt); put("milestones", g.milestones)
@@ -1363,7 +1365,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("recurringReminders", JSONArray(recurringReminders.value.map { r ->
+            root.put("recurringReminders", JSONArray(repository.allRecurringReminders.first().map { r ->
                 JSONObject().apply {
                     put("title", r.title); put("type", r.type); put("time", r.time)
                     put("isActive", r.isActive); put("createdAt", r.createdAt); put("isDeleted", r.isDeleted)
@@ -1371,7 +1373,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("remindLinks", JSONArray(remindLinks.value.map { l ->
+            root.put("remindLinks", JSONArray(repository.allRemindLinks.first().map { l ->
                 JSONObject().apply {
                     put("chatId", l.chatId); put("text", l.text); put("link", l.link)
                     put("dueDateTime", l.dueDateTime); put("originalMsgId", l.originalMsgId)
@@ -1380,7 +1382,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }))
 
-            root.put("privateSpaceItems", JSONArray(privateSpaceItems.value.map { p ->
+            root.put("privateSpaceItems", JSONArray(repository.allPrivateSpaceItems.first().map { p ->
                 JSONObject().apply {
                     put("title", p.title); put("content", p.content); put("category", p.category)
                     put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
