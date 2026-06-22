@@ -36,7 +36,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun verifyPin(pin: String): Boolean {
-        val savedHash = prefs.getString("secure_pin_hash", null) ?: return true
+        val savedHash = prefs.getString("secure_pin_hash", null) ?: return false
         return savedHash == hashString(pin)
     }
 

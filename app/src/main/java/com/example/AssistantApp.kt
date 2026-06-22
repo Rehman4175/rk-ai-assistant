@@ -15,5 +15,9 @@ class AssistantApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize Gemini Service
+        val prefs = com.example.data.SecurePrefHelper(this)
+        com.example.data.GeminiService.initialize(prefs.getGeminiApiKey())
     }
 }

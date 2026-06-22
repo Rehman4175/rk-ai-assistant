@@ -234,7 +234,7 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
             if (!reminder.isAcknowledged && !reminder.isDeleted && now >= reminder.dueDateTime) {
                 // Send rich notification
                 val completeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
-                    action = "COMPLETE_REMINDER"
+                    action = "com.aistudio.rkaiassistant.COMPLETE_REMINDER"
                     putExtra("REMINDER_ID", reminder.id)
                 }
                 val pendingComplete = PendingIntent.getBroadcast(
@@ -250,7 +250,7 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
                 ).build()
 
                 val snoozeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
-                    action = "SNOOZE_REMINDER"
+                    action = "com.aistudio.rkaiassistant.SNOOZE_REMINDER"
                     putExtra("REMINDER_ID", reminder.id)
                 }
                 val pendingSnooze = PendingIntent.getBroadcast(
@@ -440,7 +440,7 @@ class SmartReminderReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (intent.action == "COMPLETE_REMINDER") {
+                if (intent.action == "com.aistudio.rkaiassistant.COMPLETE_REMINDER") {
                     if (reminderId != -1) {
                         notificationManager.cancel(reminderId)
                         val db = AppDatabase.getDatabase(context)
@@ -452,7 +452,7 @@ class SmartReminderReceiver : BroadcastReceiver() {
                             Toast.makeText(context, "Reminder completed.", Toast.LENGTH_SHORT).show()
                         }
                     }
-                } else if (intent.action == "SNOOZE_REMINDER") {
+                } else if (intent.action == "com.aistudio.rkaiassistant.SNOOZE_REMINDER") {
                     if (reminderId != -1) {
                         notificationManager.cancel(reminderId)
                         val db = AppDatabase.getDatabase(context)

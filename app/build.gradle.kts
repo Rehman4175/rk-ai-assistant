@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.aistudio.rkaiassistant"
   compileSdk = 36  // Reverted to 36 to avoid migration warnings for now
 
   defaultConfig {

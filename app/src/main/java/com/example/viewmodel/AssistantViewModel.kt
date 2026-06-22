@@ -282,6 +282,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // Security: Initialize GeminiService with key from EncryptedSharedPreferences
+        // Note: Also initialized in AssistantApp.onCreate for safety
         val geminiKey = prefs.getGeminiApiKey()
         GeminiService.initialize(geminiKey)
 

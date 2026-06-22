@@ -75,8 +75,8 @@
             android:enabled="true"
             android:exported="false">
             <intent-filter>
-                <action android:name="COMPLETE_REMINDER" />
-                <action android:name="SNOOZE_REMINDER" />
+                <action android:name="com.aistudio.rkaiassistant.COMPLETE_REMINDER" />
+                <action android:name="com.aistudio.rkaiassistant.SNOOZE_REMINDER" />
             </intent-filter>
         </receiver>
 
