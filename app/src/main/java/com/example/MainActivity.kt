@@ -3,6 +3,7 @@ package com.example
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import com.aistudio.rkaiassistant.R
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,13 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -196,6 +197,19 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 )
 
                 NavigationBarItem(
+                    selected = currentScreen == AppScreen.Market,
+                    onClick = { viewModel.navigateTo(AppScreen.Market) },
+                    label = { Text("Market", fontSize = 10.sp, color = if (currentScreen == AppScreen.Market) NeonCyan else SoftTextGray) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                            contentDescription = "Market & Finance",
+                            tint = if (currentScreen == AppScreen.Market) NeonCyan else SoftTextGray
+                        )
+                    }
+                )
+
+                NavigationBarItem(
                     selected = currentScreen == AppScreen.Settings || currentScreen == AppScreen.Search,
                     onClick = { viewModel.navigateTo(AppScreen.Settings) },
                     label = { Text(stringResource(R.string.nav_system), fontSize = 10.sp, color = if (currentScreen == AppScreen.Settings) NeonCyan else SoftTextGray) },
@@ -262,6 +276,7 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 AppScreen.RemindLinks -> RemindLinksScreen(viewModel)
                 AppScreen.PrivateSpace -> PrivateSpaceScreen(viewModel)
                 AppScreen.PrivateNoteEdit -> PrivateNoteEditScreen(viewModel)
+                AppScreen.Market -> MarketScreen(viewModel)
             }
         }
     }

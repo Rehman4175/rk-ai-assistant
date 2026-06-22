@@ -21,15 +21,12 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 fun scheduleAllWorkers(context: Context) {
-    // 1. Schedule Smart Reminder Worker
-    // Note: PeriodicWorkRequest has a minimum interval of 15 minutes.
-    // We use a cascading OneTimeWorkRequest for "every minute" precision.
-    val reminderRequest = OneTimeWorkRequestBuilder<ReminderWorker>()
-        .setInitialDelay(30, TimeUnit.SECONDS)
+    // 1. Schedule Smart Reminder Worker as Periodic fallback (Every 1 hour)
+    val reminderRequest = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.HOURS)
         .build()
-    WorkManager.getInstance(context).enqueueUniqueWork(
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
         "SmartReminderWorker",
-        ExistingWorkPolicy.REPLACE,
+        ExistingPeriodicWorkPolicy.KEEP,
         reminderRequest
     )
 
@@ -42,7 +39,10 @@ fun scheduleAllWorkers(context: Context) {
     // 4. Schedule Daily Briefing Worker (Daily 8 AM)
     scheduleDailyBriefing(context)
 
-    // 5. Periodic Sync Worker (Every 1 hour)
+    // 5. Schedule Recurring Reminder Checker (Daily 1 AM)
+    scheduleRecurringCheck(context)
+
+    // 6. Periodic Sync Worker (Every 1 hour)
     val syncRequest = PeriodicWorkRequestBuilder<GoogleSheetSyncWorker>(1, TimeUnit.HOURS)
         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
         .build()
@@ -51,6 +51,22 @@ fun scheduleAllWorkers(context: Context) {
         ExistingPeriodicWorkPolicy.KEEP,
         syncRequest
     )
+}
+
+fun scheduleRecurringCheck(context: Context) {
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 1)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+    }
+    if (target.before(now)) target.add(Calendar.DAY_OF_YEAR, 1)
+    
+    val delay = target.timeInMillis - now.timeInMillis
+    val request = OneTimeWorkRequestBuilder<DailyRecurringWorker>()
+        .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork("DailyRecurringWorker", ExistingWorkPolicy.REPLACE, request)
 }
 
 fun scheduleWeeklyReview(context: Context) {
@@ -223,7 +239,7 @@ class GoogleSheetSyncWorker(val context: Context, workerParams: WorkerParameters
     }
 }
 
-// WORKER 1: Smart Reminder checking (cascades self every 15-30 seconds for better precision)
+// WORKER 1: Smart Reminder checking (Periodic fallback)
 class ReminderWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result {
         val db = AppDatabase.getDatabase(context)
@@ -279,16 +295,6 @@ class ReminderWorker(val context: Context, workerParams: WorkerParameters) : Cor
                 db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
             }
         }
-
-        // Reschedule work execution in 30 seconds for higher precision
-        val reminderRequest = OneTimeWorkRequestBuilder<ReminderWorker>()
-            .setInitialDelay(30, TimeUnit.SECONDS)
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "SmartReminderWorker",
-            ExistingWorkPolicy.REPLACE,
-            reminderRequest
-        )
 
         return Result.success()
     }
@@ -427,6 +433,34 @@ class DailyBriefingWorker(val context: Context, workerParams: WorkerParameters) 
         )
 
         scheduleDailyBriefing(context)
+        return Result.success()
+    }
+}
+
+// WORKER 5: Daily Recurring Reminder Checker
+class DailyRecurringWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+    override suspend fun doWork(): Result {
+        val db = AppDatabase.getDatabase(context)
+        val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        
+        // Find recurring reminders that should fire today
+        val recurring = db.recurringReminderDao().getAll().first()
+        recurring.forEach { rem ->
+            // Logic: If 'time' field contains day of month like "Day 3" or similar
+            // For now, simple match (this can be expanded with a specific field)
+            if (rem.isActive && rem.time.contains("Day $dayOfMonth")) {
+                sendAndroidNotification(
+                    context, 
+                    rem.id + 20000, 
+                    "recurring_channel", 
+                    "Bill Reminders", 
+                    "📅 Recurring: ${rem.title}", 
+                    "Today is day $dayOfMonth. Don't forget: ${rem.title}"
+                )
+            }
+        }
+        
+        scheduleRecurringCheck(context)
         return Result.success()
     }
 }

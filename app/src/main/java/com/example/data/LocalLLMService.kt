@@ -43,12 +43,12 @@ object LocalLLMService {
             llmInference = LlmInference.createFromOptions(context, options)
             isInitialized = true
             android.util.Log.d("RKAI", "LlmInference initialized successfully")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             android.util.Log.e("RKAI", "LlmInference initialization failed: ${e.message}")
             isInitialized = false
             
             // If the model file is corrupted (invalid magic number), delete it so it can be re-downloaded
-            if (e.message?.contains("Invalid magic number", ignoreCase = true) == true) {
+            if (e is Exception && e.message?.contains("Invalid magic number", ignoreCase = true) == true) {
                 android.util.Log.e("RKAI", "Corrupted model detected. Deleting $modelFile")
                 modelFile.delete()
             }

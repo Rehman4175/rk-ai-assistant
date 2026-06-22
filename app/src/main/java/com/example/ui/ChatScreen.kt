@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.R
+import com.aistudio.rkaiassistant.R
 import com.example.ui.theme.*
 import android.app.Activity
 import android.content.Intent

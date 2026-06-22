@@ -33,7 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class AppScreen {
-    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace, History, PrivateNoteEdit
+    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace, History, PrivateNoteEdit, Market
 }
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,6 +43,47 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val prefs = SecurePrefHelper(application)
     private val cryptoManager = CryptoManager()
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
+
+    // Finance/Market State
+    val goldRate = MutableStateFlow("Loading...")
+    val silverRate = MutableStateFlow("Loading...")
+    val stockRates = MutableStateFlow<Map<String, String>>(emptyMap())
+    val newsHeadlines = MutableStateFlow<List<NewsItem>>(emptyList())
+    val isMarketLoading = MutableStateFlow(false)
+
+    data class NewsItem(val title: String, val description: String, val url: String, val source: String)
+
+    suspend fun fetchMarketData() {
+        if (isMarketLoading.value) return
+        isMarketLoading.value = true
+        
+        try {
+            // Logic: Yahoo Finance endpoints (Unofficial & Free)
+            // Gold (GC=F), Silver (SI=F), USDINR (USDINR=X)
+            // Note: In production, we'd use a robust networking library here.
+            // For now, updating UI with placeholder to show structure.
+            
+            // Placeholder logic to simulate fetching
+            delay(1000)
+            goldRate.value = "₹72,450 / 10g"
+            silverRate.value = "₹88,200 / 1kg"
+            
+            val stocks = mutableMapOf<String, String>()
+            stocks["RELIANCE.NS"] = "₹2,950.45"
+            stocks["TATAMOTORS.NS"] = "₹980.20"
+            stocks["NIFTY 50"] = "23,500.10"
+            stockRates.value = stocks
+
+            newsHeadlines.value = listOf(
+                NewsItem("Sensex hits all-time high", "Market surges as global indices rally.", "#", "TechNews"),
+                NewsItem("New AI Model Released", "RK AI Assistant gets a massive update.", "#", "WorldTech")
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("RKAI", "Market Fetch Error", e)
+        } finally {
+            isMarketLoading.value = false
+        }
+    }
 
     // Current Screen
     val currentScreen = MutableStateFlow(AppScreen.Dashboard)
@@ -633,7 +674,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // --- Reminder Actions ---
     fun addReminder(title: String, dueDateTime: Long, recurrence: String, chatId: String = "", remarks: String = "") {
         viewModelScope.launch {
-            repository.insertReminder(Reminder(title = title, dueDateTime = dueDateTime, recurrence = recurrence, chatId = chatId, remarks = remarks))
+            val id = repository.insertReminder(Reminder(title = title, dueDateTime = dueDateTime, recurrence = recurrence, chatId = chatId, remarks = remarks))
+            AlarmHelper.scheduleExactAlarm(getApplication(), id.toInt(), dueDateTime, title)
             triggerImmediateSync()
         }
     }
@@ -667,7 +709,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
             }
-            repository.insertReminder(Reminder(title = cleanTitle.ifBlank { text }, dueDateTime = calculatedTime))
+            val id = repository.insertReminder(Reminder(title = cleanTitle.ifBlank { text }, dueDateTime = calculatedTime))
+            AlarmHelper.scheduleExactAlarm(getApplication(), id.toInt(), calculatedTime, cleanTitle.ifBlank { text })
             speak("Reminder set: $cleanTitle")
         }
     }

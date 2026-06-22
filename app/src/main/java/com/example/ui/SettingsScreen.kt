@@ -303,13 +303,20 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
                     OutlinedTextField(
                         value = geminiKeyInput,
-                        onValueChange = {
-                            geminiKeyInput = it
-                            viewModel.prefs.saveGeminiApiKey(it)
-                            com.example.data.GeminiService.initialize(it)
-                        },
+                        onValueChange = { geminiKeyInput = it },
                         label = { Text("Gemini API Key", color = SoftTextGray) },
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            if (geminiKeyInput != viewModel.prefs.getGeminiApiKey()) {
+                                IconButton(onClick = {
+                                    viewModel.prefs.saveGeminiApiKey(geminiKeyInput)
+                                    com.example.data.GeminiService.initialize(geminiKeyInput)
+                                    Toast.makeText(context, "Gemini Key Updated!", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Default.Upload, null, tint = NeonCyan)
+                                }
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,
                             unfocusedBorderColor = BorderColor,
@@ -321,12 +328,19 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
                     OutlinedTextField(
                         value = weatherKeyInput,
-                        onValueChange = {
-                            weatherKeyInput = it
-                            viewModel.prefs.saveWeatherApiKey(it)
-                        },
+                        onValueChange = { weatherKeyInput = it },
                         label = { Text("OpenWeatherMap API Key", color = SoftTextGray) },
                         visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            if (weatherKeyInput != viewModel.prefs.getWeatherApiKey()) {
+                                IconButton(onClick = {
+                                    viewModel.prefs.saveWeatherApiKey(weatherKeyInput)
+                                    Toast.makeText(context, "Weather Key Updated!", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Default.Upload, null, tint = NeonCyan)
+                                }
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,
                             unfocusedBorderColor = BorderColor,

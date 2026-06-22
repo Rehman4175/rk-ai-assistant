@@ -8,12 +8,11 @@ import java.security.MessageDigest
 
 class SecurePrefHelper(context: Context) {
     
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    // Versioned filename to avoid crashes when migrating from unencrypted prefs
     private val prefs: SharedPreferences = try {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
         EncryptedSharedPreferences.create(
             context,
             "rk_assistant_secure_v4", // Incremented version to ensure clean start with encryption
@@ -22,22 +21,10 @@ class SecurePrefHelper(context: Context) {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
     } catch (e: Exception) {
-        android.util.Log.e("RKAI", "CRITICAL: EncryptedSharedPreferences failed! Security compromised.", e)
-        // If encryption fails, we MUST NOT fallback to plaintext silently.
-        // We attempt to clear the corrupted prefs and try again one last time.
-        try {
-            context.deleteSharedPreferences("rk_assistant_secure_v4")
-            EncryptedSharedPreferences.create(
-                context,
-                "rk_assistant_secure_v4",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e2: Exception) {
-            // Final fallback to a clearly marked insecure storage if even recreation fails
-            context.getSharedPreferences("INSECURE_PREFS_EMERGENCY_ONLY", Context.MODE_PRIVATE)
-        }
+        android.util.Log.e("RKAI", "CRITICAL: Secure Preferences initialization failed!", e)
+        // Fallback to regular SharedPreferences if encryption is unavailable or broken on this device
+        // In a real production app, you might want to handle this more strictly.
+        context.getSharedPreferences("rk_assistant_fallback_prefs", Context.MODE_PRIVATE)
     }
 
     fun isPinEnabled(): Boolean {

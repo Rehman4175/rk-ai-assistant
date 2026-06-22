@@ -73,6 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "rk_assistant_database_v3"
                 )
                 .openHelperFactory(factory)
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

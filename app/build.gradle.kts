@@ -4,6 +4,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
+  alias(libs.plugins.kotlin.android)
 }
 
 android {
@@ -65,6 +66,9 @@ android {
     unitTests {
       isIncludeAndroidResources = true
     }
+  }
+  kotlinOptions {
+    jvmTarget = "11"
   }
 }
 
