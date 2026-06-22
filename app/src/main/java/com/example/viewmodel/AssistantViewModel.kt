@@ -281,10 +281,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // Security: Initialize GeminiService with key from EncryptedSharedPreferences
-        // Note: Also initialized in AssistantApp.onCreate for safety
+        // Security: Key is initialized in AssistantApp.onCreate for safety.
+        // We only check if it's available to update the UI state.
         val geminiKey = prefs.getGeminiApiKey()
-        GeminiService.initialize(geminiKey)
 
         // Update online status
         isOnline.value = geminiKey.isNotBlank()
