@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
+import java.security.SecureRandom
 
 @Database(
     entities = [
@@ -54,8 +55,16 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                // Passphrase for SQLCipher encryption
-                val factory = SupportOpenHelperFactory("rk-secure-assistant-db-key-2025".toByteArray())
+                val prefs = SecurePrefHelper(context)
+                var passphrase = prefs.getDbPassphrase()
+                
+                if (passphrase == null) {
+                    passphrase = ByteArray(32)
+                    SecureRandom().nextBytes(passphrase)
+                    prefs.saveDbPassphrase(passphrase)
+                }
+
+                val factory = SupportOpenHelperFactory(passphrase)
                 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,

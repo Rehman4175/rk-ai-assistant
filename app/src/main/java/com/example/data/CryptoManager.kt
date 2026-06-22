@@ -68,7 +68,7 @@ class CryptoManager {
         return try {
             android.util.Base64.encodeToString(encrypt(text.toByteArray()), android.util.Base64.DEFAULT)
         } catch (e: Exception) {
-            text
+            throw SecurityException("Encryption failed", e)
         }
     }
 
@@ -77,7 +77,7 @@ class CryptoManager {
             val bytes = android.util.Base64.decode(encryptedBase64, android.util.Base64.DEFAULT)
             String(decrypt(bytes))
         } catch (e: Exception) {
-            encryptedBase64
+            throw SecurityException("Decryption failed", e)
         }
     }
 

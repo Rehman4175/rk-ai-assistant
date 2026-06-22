@@ -146,6 +146,20 @@ class SecurePrefHelper(context: Context) {
         return prefs.getString("GEMINI_API_KEY", "") ?: ""
     }
 
+    fun getDbPassphrase(): ByteArray? {
+        val base64 = prefs.getString("db_passphrase_v1", null) ?: return null
+        return try {
+            android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveDbPassphrase(passphrase: ByteArray) {
+        val base64 = android.util.Base64.encodeToString(passphrase, android.util.Base64.DEFAULT)
+        prefs.edit().putString("db_passphrase_v1", base64).apply()
+    }
+
     fun saveWeatherApiKey(key: String) {
         prefs.edit().putString("WEATHER_API_KEY", key).apply()
     }

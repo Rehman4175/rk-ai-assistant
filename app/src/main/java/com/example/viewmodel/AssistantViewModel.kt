@@ -98,7 +98,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val remindLinks: StateFlow<List<RemindLink>> = repository.allRemindLinks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> = repository.allPrivateSpaceItems
         .map { items ->
-            items.map { it.copy(content = cryptoManager.decryptString(it.content)) }
+            items.map { 
+                try {
+                    it.copy(content = cryptoManager.decryptString(it.content))
+                } catch (e: Exception) {
+                    it.copy(content = "[Decryption Error]")
+                }
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val allActivities: StateFlow<List<ActivityItem>> = combine(
@@ -1419,7 +1425,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         root.put("privateSpaceItems", JSONArray(repository.allPrivateSpaceItems.first().map { p ->
             JSONObject().apply {
-                put("title", p.title); put("content", cryptoManager.decryptString(p.content)); put("category", p.category)
+                put("title", p.title); put("content", p.content); put("category", p.category)
                 put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
                 put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
             }
@@ -1645,7 +1651,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         repository.insertPrivateSpaceItem(PrivateSpaceItem(
-                            title = obj.getString("title"), content = cryptoManager.encryptString(obj.getString("content")),
+                            title = obj.getString("title"), content = obj.getString("content"),
                             category = obj.optString("category", "note"), isPinned = obj.optBoolean("isPinned"),
                             photoPath = obj.optString("photoPath"), createdAt = obj.optString("createdAt"),
                             modifiedAt = obj.optString("modifiedAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")

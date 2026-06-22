@@ -140,7 +140,15 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
     
     // Dynamic channel ID based on sound to force updates
     val finalChannelId = if (customTuneUri.isNotBlank()) {
-        "${channelId}_${customTuneUri.hashCode()}"
+        val soundHash = try { 
+            java.security.MessageDigest.getInstance("MD5")
+                .digest(customTuneUri.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+                .take(8)
+        } catch (e: Exception) { 
+            customTuneUri.hashCode().toString() 
+        }
+        "${channelId}_$soundHash"
     } else {
         channelId
     }
