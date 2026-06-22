@@ -55,6 +55,7 @@ object NotificationHelper {
         return uriString?.let { Uri.parse(it) }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     fun showNotification(
         context: Context,
         title: String,
@@ -62,6 +63,17 @@ object NotificationHelper {
         notificationId: Int = System.currentTimeMillis().toInt()
     ) {
         val manager = NotificationManagerCompat.from(context)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    "android.permission.POST_NOTIFICATIONS"
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
         val tone = getCustomTone(context) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)

@@ -55,11 +55,16 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
     var waterGoalInput by remember { mutableStateOf(viewModel.prefs.getWaterGoal().toString()) }
     var budgetInput by remember { mutableStateOf(viewModel.prefs.getExpenseBudget().toString()) }
 
+    var geminiKeyInput by remember { mutableStateOf(viewModel.prefs.getGeminiApiKey()) }
+    var weatherKeyInput by remember { mutableStateOf(viewModel.prefs.getWeatherApiKey()) }
+
     var scriptUrlInput by remember { mutableStateOf(viewModel.prefs.getGoogleScriptUrl()) }
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncStatus by viewModel.lastSyncStatus.collectAsState()
 
-    val isUrlValid = scriptUrlInput.isBlank() || scriptUrlInput.contains("script.google.com/macros/s/")
+    val isUrlValid = scriptUrlInput.isBlank() || 
+                    (scriptUrlInput.startsWith("https://script.google.com") && 
+                     scriptUrlInput.contains("/macros/s/"))
     val isSpreadsheetUrl = scriptUrlInput.contains("docs.google.com/spreadsheets")
 
     var notificationTuneInput by remember { mutableStateOf(viewModel.prefs.getNotificationTune()) }
@@ -277,6 +282,51 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             }
                         },
                         label = { Text("Expense Budget limit (₹)", color = SoftTextGray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderColor,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Divider(color = BorderColor, thickness = 0.5.dp)
+
+                    Text(
+                        text = "API KEYS CONFIGURATION (ENCRYPTED)",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    OutlinedTextField(
+                        value = geminiKeyInput,
+                        onValueChange = {
+                            geminiKeyInput = it
+                            viewModel.prefs.saveGeminiApiKey(it)
+                            com.example.data.GeminiService.initialize(it)
+                        },
+                        label = { Text("Gemini API Key", color = SoftTextGray) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderColor,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = weatherKeyInput,
+                        onValueChange = {
+                            weatherKeyInput = it
+                            viewModel.prefs.saveWeatherApiKey(it)
+                        },
+                        label = { Text("OpenWeatherMap API Key", color = SoftTextGray) },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,
                             unfocusedBorderColor = BorderColor,

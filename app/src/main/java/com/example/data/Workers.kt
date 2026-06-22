@@ -121,8 +121,20 @@ fun scheduleDailyBriefing(context: Context) {
 }
 
 // Helper to send a simple notifications
+@android.annotation.SuppressLint("MissingPermission")
 fun sendAndroidNotification(context: Context, id: Int, channelId: String, channelName: String, title: String, text: String, actions: List<NotificationCompat.Action> = emptyList()) {
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                "android.permission.POST_NOTIFICATIONS"
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+    }
+
     val prefs = SecurePrefHelper(context)
     val customTuneUri = prefs.getNotificationTune()
     
@@ -150,7 +162,7 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
                         .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                     setSound(soundUri, audioAttributes)
-                } catch (e: Exception) {}
+                } catch (_: Exception) {}
             }
         }
         notificationManager.createNotificationChannel(channel)
@@ -281,7 +293,6 @@ class WeeklyReviewWorker(val context: Context, workerParams: WorkerParameters) :
 
         // Gather statistics from flows
         val allTasks = db.taskDao().getAllTasks().first()
-        val allHabits = db.habitDao().getAllHabits().first()
         val allExpenses = db.expenseDao().getAllExpenses().first()
         val allDiary = db.diaryEntryDao().getAllDiaryEntries().first()
 

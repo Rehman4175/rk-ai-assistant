@@ -1,6 +1,5 @@
 package com.example.data
 
-import com.example.BuildConfig
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -16,7 +15,6 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 import java.net.UnknownHostException
 import java.net.SocketTimeoutException
-import javax.net.ssl.SSLException
 
 // ===== DATA MODELS =====
 
@@ -56,7 +54,7 @@ interface GeminiApi {
     suspend fun generateContent(
         @Query("key") apiKey: String,
         @Body request: GeminiRequest
-    ): retrofit2.Response<GeminiResponse>  // ✅ FIX: Using Response wrapper for proper error handling
+    ): retrofit2.Response<GeminiResponse>
 }
 
 interface WeatherApi {
@@ -72,16 +70,21 @@ interface WeatherApi {
 // ===== SERVICE OBJECTS =====
 
 object GeminiService {
+    private var geminiApiKey: String = ""
+
+    fun initialize(apiKey: String) {
+        geminiApiKey = apiKey
+    }
+
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
-    // ✅ FIX: Added more robust OkHttpClient with retry mechanism
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)  // Reduced from 60 to 30
+        .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)  // ✅ FIX: Auto retry on connection failure
+        .retryOnConnectionFailure(true)
         .build()
 
     private val retrofit = Retrofit.Builder()
@@ -91,16 +94,15 @@ object GeminiService {
         .build()
 
     private val geminiApi = retrofit.create(GeminiApi::class.java)
+    
     private val weatherRetrofit = Retrofit.Builder()
         .baseUrl("https://api.openweathermap.org/")
         .client(okHttpClient)
         .build()
     private val weatherApi = weatherRetrofit.create(WeatherApi::class.java)
 
-    // ✅ FIX: Better API key check
     fun isApiKeyConfigured(): Boolean {
-        val key = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
-        return key.isNotEmpty() && key != "MY_GEMINI_API_KEY" && key != "YOUR_GEMINI_API_KEY"
+        return geminiApiKey.isNotBlank() && geminiApiKey != "MY_GEMINI_API_KEY" && geminiApiKey != "YOUR_GEMINI_API_KEY"
     }
 
     suspend fun chat(
@@ -109,7 +111,6 @@ object GeminiService {
         chatHistory: List<ChatMessage> = emptyList(),
         onError: ((String) -> Unit)? = null
     ): String? {
-        val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
         if (!isApiKeyConfigured()) {
             onError?.invoke("API Key not configured.")
             return null
@@ -130,9 +131,8 @@ object GeminiService {
         )
 
         return try {
-            val response = geminiApi.generateContent(apiKey, request)
+            val response = geminiApi.generateContent(geminiApiKey, request)
 
-            // ✅ FIX: Proper response handling
             if (response.isSuccessful) {
                 response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                     ?: "No response from AI."
@@ -158,19 +158,14 @@ object GeminiService {
         }
     }
 
-    /**
-     * ✅ FIX: Improved OCR with better error handling
-     */
     suspend fun performOcr(
         base64Image: String,
         mimeType: String = "image/jpeg"
     ): String {
-        val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
         if (!isApiKeyConfigured()) {
             return "⚠️ OCR unavailable — configure GEMINI_API_KEY first."
         }
 
-        // ✅ FIX: Validate base64 image
         if (base64Image.isEmpty() || base64Image.length < 100) {
             return "❌ Invalid image data. Please capture a valid image."
         }
@@ -189,7 +184,7 @@ object GeminiService {
         )
 
         return try {
-            val response = geminiApi.generateContent(apiKey, request)
+            val response = geminiApi.generateContent(geminiApiKey, request)
             when {
                 response.isSuccessful -> {
                     response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
@@ -207,14 +202,10 @@ object GeminiService {
         }
     }
 
-    /**
-     * ✅ FIX: Improved audio transcription
-     */
     suspend fun transcribeAudio(
         base64Audio: String,
         mimeType: String = "audio/mp4"
     ): String {
-        val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
         if (!isApiKeyConfigured()) {
             return "⚠️ Transcription unavailable — configure GEMINI_API_KEY first."
         }
@@ -237,7 +228,7 @@ object GeminiService {
         )
 
         return try {
-            val response = geminiApi.generateContent(apiKey, request)
+            val response = geminiApi.generateContent(geminiApiKey, request)
             when {
                 response.isSuccessful -> {
                     response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
@@ -255,12 +246,6 @@ object GeminiService {
         }
     }
 
-    /**
-     * ✅ FIX: Improved smart parsing
-     */
-    /**
-     * ✅ FIX: Real-time Weather Integration
-     */
     suspend fun fetchWeather(lat: Double, lon: Double, apiKey: String): String {
         return try {
             val response = weatherApi.getWeather(lat, lon, apiKey)
@@ -284,7 +269,6 @@ object GeminiService {
         userInput: String,
         parseType: String // "task", "reminder", "expense", "event"
     ): String {
-        val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
         if (!isApiKeyConfigured()) return ""
 
         val todayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
@@ -308,7 +292,7 @@ object GeminiService {
                 systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt))),
                 generationConfig = GenerationConfig(temperature = 0.1f, maxOutputTokens = 200)
             )
-            val response = geminiApi.generateContent(apiKey, request)
+            val response = geminiApi.generateContent(geminiApiKey, request)
             if (response.isSuccessful) {
                 response.body()?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
             } else {
@@ -340,7 +324,6 @@ object GoogleSheetsService {
             val maxRedirects = 5
 
             try {
-                // Use a client that doesn't auto-handle redirects because we need to preserve POST body
                 val client = okHttpClient.newBuilder()
                     .followRedirects(false)
                     .followSslRedirects(false)
@@ -357,12 +340,10 @@ object GoogleSheetsService {
 
                     val nextResponse = client.newCall(request).execute()
                     
-                    // If it's a redirect (301, 302, 303, 307, 308)
                     if (nextResponse.code in 300..308) {
                         val location = nextResponse.header("Location")
                         nextResponse.close()
                         if (location != null) {
-                            // Resolve relative URLs if necessary
                             currentUrl = if (location.startsWith("http")) {
                                 location
                             } else {
@@ -383,10 +364,6 @@ object GoogleSheetsService {
                 val code = response.code
                 response.close()
 
-                println("Sync Result - Code: $code, Body: $responseBody")
-
-                // Success if code is 200 and body contains "Success"
-                // Or if it's still a redirect but we hit the limit (sometimes GAS acts weird)
                 code == 200 && responseBody.contains("Success", ignoreCase = true)
             } catch (e: Exception) {
                 e.printStackTrace()

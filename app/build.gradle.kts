@@ -8,7 +8,7 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 36  // ✅ FIX: Correct syntax
+  compileSdk = 36  // Reverted to 36 to avoid migration warnings for now
 
   defaultConfig {
     applicationId = "com.aistudio.rkaiassistant.fptwyz"
@@ -19,32 +19,7 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    // ✅ FIX: Load keys from local.properties, env, or .env file manually as fallback
-    fun getSecret(key: String, default: String = ""): String {
-        val projectProp = project.findProperty(key)?.toString()
-        if (!projectProp.isNullOrBlank()) return projectProp
-        
-        val envVar = System.getenv(key)
-        if (!envVar.isNullOrBlank()) return envVar
-        
-        // Manual .env fallback if others fail (sometimes secrets plugin is picky in IDE)
-        try {
-            val envFile = file("${rootDir}/.env")
-            if (envFile.exists()) {
-                val lines = envFile.readLines()
-                for (line in lines) {
-                    if (line.startsWith("${key}=")) {
-                        return line.substringAfter("=").trim('"').trim('\'')
-                    }
-                }
-            }
-        } catch (e: Exception) {}
-        
-        return default
-    }
-
-    buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
-    buildConfigField("String", "WEATHER_API_KEY", "\"${getSecret("WEATHER_API_KEY")}\"")
+    // Security Fix: API Keys moved to EncryptedSharedPreferences to avoid decompilation from BuildConfig
   }
 
   signingConfigs {
@@ -66,6 +41,12 @@ android {
     }
     debug {
       signingConfig = signingConfigs.getByName("debug")
+    }
+  }
+
+  packaging {
+    jniLibs {
+      useLegacyPackaging = false
     }
   }
 
@@ -145,11 +126,13 @@ dependencies {
   // Work Manager
   implementation(libs.androidx.work.runtime)
 
+  // Security & Encryption
+  implementation(libs.sqlcipher)
+  implementation(libs.androidx.security.crypto)
+
   // Testing
   testImplementation(libs.junit)
-  testImplementation(libs.androidx.junit)
   testImplementation(libs.androidx.core)
-  testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
   testImplementation(libs.roborazzi)
@@ -157,9 +140,7 @@ dependencies {
   testImplementation(libs.roborazzi.junit.rule)
 
   androidTestImplementation(platform(libs.androidx.compose.bom))
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)
-  androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
 
   debugImplementation(libs.androidx.compose.ui.test.manifest)

@@ -4,8 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [
@@ -27,7 +26,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RemindLink::class,
         PrivateSpaceItem::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -55,11 +54,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                // Passphrase for SQLCipher encryption
+                val factory = SupportOpenHelperFactory("rk-secure-assistant-db-key-2025".toByteArray())
+                
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "rk_assistant_database"
+                    "rk_assistant_database_v2"
                 )
+                .openHelperFactory(factory)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

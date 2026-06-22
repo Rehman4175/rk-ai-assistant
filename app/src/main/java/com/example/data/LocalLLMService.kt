@@ -46,7 +46,7 @@ object LocalLLMService {
         } catch (e: Exception) {
             android.util.Log.e("RKAI", "LlmInference initialization failed", e)
             isInitialized = false
-            throw e 
+            // throw e // Don't re-throw to avoid crashing the app during init
         }
     }
 

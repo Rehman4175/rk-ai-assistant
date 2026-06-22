@@ -42,6 +42,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val db = AppDatabase.getDatabase(application)
     private val repository = DatabaseRepository(db)
     val prefs = SecurePrefHelper(application)
+    private val cryptoManager = CryptoManager()
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
 
     // Current Screen
@@ -95,7 +96,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val goals: StateFlow<List<Goal>> = repository.allGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val recurringReminders: StateFlow<List<RecurringReminder>> = repository.allRecurringReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val remindLinks: StateFlow<List<RemindLink>> = repository.allRemindLinks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> = repository.allPrivateSpaceItems.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> = repository.allPrivateSpaceItems
+        .map { items ->
+            items.map { it.copy(content = cryptoManager.decryptString(it.content)) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val allActivities: StateFlow<List<ActivityItem>> = combine(
         tasks, reminders, habits, expenses, bills, events, diaryEntries, notes, memories, smartReminders, voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems
     ) { arrays ->
@@ -118,6 +123,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         (arrays[10] as List<VoiceNote>).forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
         (arrays[11] as List<Goal>).forEach { 
             list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp))
+        }
+        (arrays[12] as List<RecurringReminder>).forEach {
+            list.add(ActivityItem("${it.id}#", "RECURRING", it.title, it.time, it.isDeleted, it.isActive, it.createdAt))
+        }
+        (arrays[13] as List<RemindLink>).forEach {
+            val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.createdAt)?.time ?: 0L } catch (e: Exception) { 0L }
+            list.add(ActivityItem("${it.id}#", "LINK", it.text, it.dueDateTime, it.isDeleted, it.isAcknowledged, ts))
+        }
+        (arrays[14] as List<PrivateSpaceItem>).forEach {
+            val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.modifiedAt)?.time ?: 0L } catch (e: Exception) { 0L }
+            list.add(ActivityItem("${it.id}#", "PRIVATE", it.title, it.modifiedAt, it.isDeleted, true, ts))
         }
         
         list.sortedByDescending { it.timestamp }
@@ -187,8 +203,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val backupDataJson = MutableStateFlow("")
 
     private suspend fun updateWeather() {
-        // OpenWeatherMap API Key from BuildConfig
-        val weatherKey = try { BuildConfig.WEATHER_API_KEY } catch (e: Exception) { "" }
+        // Security Fix: Get API Key from SecurePreferences instead of BuildConfig
+        val weatherKey = prefs.getWeatherApiKey()
+        
         if (weatherKey.isBlank()) {
             weatherTerminal.value = "Weather Key Missing"
             return
@@ -256,6 +273,24 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
 
+        // Security Fix: Initialize GeminiService with key from EncryptedSharedPreferences
+        var geminiKey = prefs.getGeminiApiKey()
+        if (geminiKey.isBlank()) {
+            geminiKey = BuildConfig.GEMINI_API_KEY
+            if (geminiKey.isNotBlank() && !geminiKey.contains("YOUR_GEMINI_API_KEY")) {
+                prefs.saveGeminiApiKey(geminiKey)
+            }
+        }
+        GeminiService.initialize(geminiKey)
+
+        // Weather Key initialization from BuildConfig if empty
+        if (prefs.getWeatherApiKey().isBlank()) {
+            val weatherKey = BuildConfig.WEATHER_API_KEY
+            if (weatherKey.isNotBlank() && !weatherKey.contains("YOUR_OPENWEATHER_API_KEY")) {
+                prefs.saveWeatherApiKey(weatherKey)
+            }
+        }
+
         // Use Google TTS engine specifically for best Hindi/Indian English support
         tts = TextToSpeech(application, { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -288,7 +323,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 tts?.setPitch(1.0f)
                 tts?.setSpeechRate(0.95f) // Slightly slower for better clarity
             }
-        }, "com.google.android.tts")
+        }, null) // Stability Fix: Default engine (null) instead of hardcoded package
         // Check if API is configured
         isOnline.value = GeminiService.isApiKeyConfigured()
 
@@ -914,9 +949,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val result = GeminiService.chat(prompt, "You are a silent memory extractor. Output ONLY valid JSON array.")
                 if (result != null) {
-                    val cleaned = result.substringAfter("[").substringBeforeLast("]").trim()
-                    if (cleaned.isNotEmpty()) {
-                        val fullJson = "[$cleaned]"
+                    val startIndex = result.indexOf("[")
+                    val endIndex = result.lastIndexOf("]")
+                    if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
+                        val fullJson = result.substring(startIndex, endIndex + 1)
                         val array = JSONArray(fullJson)
                         for (i in 0 until array.length()) {
                             val fact = array.getString(i)
@@ -1383,7 +1419,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         root.put("privateSpaceItems", JSONArray(repository.allPrivateSpaceItems.first().map { p ->
             JSONObject().apply {
-                put("title", p.title); put("content", p.content); put("category", p.category)
+                put("title", p.title); put("content", cryptoManager.decryptString(p.content)); put("category", p.category)
                 put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
                 put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
             }
@@ -1401,6 +1437,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun restoreBackup(jsonString: String): Boolean {
         return try {
             val root = JSONObject(jsonString)
+            
+            // Stability Fix: Basic validation before restoring
+            if (!root.has("tasks") && !root.has("expenses") && !root.has("notes")) {
+                return false 
+            }
+
             viewModelScope.launch {
                 // Restore each category safely
                 if (root.has("tasks")) {
@@ -1603,7 +1645,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         repository.insertPrivateSpaceItem(PrivateSpaceItem(
-                            title = obj.getString("title"), content = obj.getString("content"),
+                            title = obj.getString("title"), content = cryptoManager.encryptString(obj.getString("content")),
                             category = obj.optString("category", "note"), isPinned = obj.optBoolean("isPinned"),
                             photoPath = obj.optString("photoPath"), createdAt = obj.optString("createdAt"),
                             modifiedAt = obj.optString("modifiedAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
@@ -1755,7 +1797,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
             repository.insertPrivateSpaceItem(PrivateSpaceItem(
-                title = title, content = content, category = category,
+                title = title, content = cryptoManager.encryptString(content), category = category,
                 photoPath = photoPath,
                 createdAt = now, modifiedAt = now
             ))
@@ -1765,7 +1807,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun updatePrivateSpaceItem(item: PrivateSpaceItem) {
         viewModelScope.launch {
             val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
-            repository.updatePrivateSpaceItem(item.copy(modifiedAt = now))
+            // Item in memory is already decrypted for UI, encrypt it before saving
+            repository.updatePrivateSpaceItem(item.copy(
+                content = cryptoManager.encryptString(item.content),
+                modifiedAt = now
+            ))
         }
     }
 
@@ -1783,6 +1829,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // --- Google Sheets Sync ---
     fun syncToGoogleSheets(scriptUrl: String) {
+        // Security Fix: Whitelist script.google.com
+        if (!scriptUrl.contains("script.google.com")) {
+            lastSyncStatus.value = "Error: Invalid URL. Only script.google.com is allowed."
+            return
+        }
+
         if (scriptUrl.isBlank()) {
             lastSyncStatus.value = "Error: Google Script URL is missing."
             return

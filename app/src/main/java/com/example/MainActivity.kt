@@ -1,10 +1,6 @@
 package com.example
 
 import android.Manifest
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
@@ -20,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -43,6 +40,7 @@ import com.example.viewmodel.AssistantViewModel
 import com.example.data.scheduleAllWorkers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
 
 class MainActivity : FragmentActivity() {
     private val viewModel: AssistantViewModel by viewModels()
@@ -63,8 +61,12 @@ class MainActivity : FragmentActivity() {
                 val permissionsLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
-                    val notificationsGranted = permissions[Manifest.permission.POST_NOTIFICATIONS] ?: false
-                    if (!notificationsGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permissions["android.permission.POST_NOTIFICATIONS"] ?: false
+                    } else {
+                        true
+                    }
+                    if (!notificationsGranted) {
                         Toast.makeText(context, "Notification permission recommended for reminders!", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -72,7 +74,7 @@ class MainActivity : FragmentActivity() {
                 LaunchedEffect(Unit) {
                     val perms = mutableListOf<String>()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                        perms.add("android.permission.POST_NOTIFICATIONS")
                     }
                     perms.add(Manifest.permission.RECORD_AUDIO)
                     perms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -110,7 +112,7 @@ class MainActivity : FragmentActivity() {
 fun MainAppContent(viewModel: AssistantViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val context = LocalContext.current
-    var backPressCount by remember { mutableStateOf(0) }
+    var backPressCount by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
     // Custom Back Navigation Logic
@@ -120,7 +122,7 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 backPressCount++
                 Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
                 scope.launch {
-                    delay(2000)
+                    delay(2.seconds)
                     backPressCount = 0
                 }
             } else {
@@ -160,7 +162,7 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     label = { Text(stringResource(R.string.nav_console), fontSize = 10.sp, color = if (currentScreen == AppScreen.Chat) NeonCyan else SoftTextGray) },
                     icon = {
                         Icon(
-                            imageVector = Icons.Default.Chat,
+                            imageVector = Icons.AutoMirrored.Filled.Chat,
                             contentDescription = stringResource(R.string.nav_console_desc),
                             tint = if (currentScreen == AppScreen.Chat) NeonCyan else SoftTextGray
                         )
@@ -218,7 +220,7 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                     try {
                         val parsed = AppScreen.valueOf(screenName.replaceFirstChar { it.uppercaseChar() })
                         viewModel.navigateTo(parsed)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         when (screenName.lowercase()) {
                             "water" -> viewModel.navigateTo(AppScreen.Water)
                             "notes" -> viewModel.navigateTo(AppScreen.Notes)

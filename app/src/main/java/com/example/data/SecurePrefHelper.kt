@@ -1,10 +1,30 @@
 package com.example.data
 
 import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import java.security.MessageDigest
 
 class SecurePrefHelper(context: Context) {
-    private val prefs = context.getSharedPreferences("rk_assistant_secure_prefs", Context.MODE_PRIVATE)
+    
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    // Versioned filename to avoid crashes when migrating from unencrypted prefs
+    private val prefs: SharedPreferences = try {
+        EncryptedSharedPreferences.create(
+            context,
+            "rk_assistant_secure_v2",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    } catch (e: Exception) {
+        // Fallback for edge cases or corrupted keystore
+        context.getSharedPreferences("rk_assistant_secure_v2_fallback", Context.MODE_PRIVATE)
+    }
 
     fun isPinEnabled(): Boolean {
         return prefs.getString("secure_pin_hash", null) != null
@@ -33,7 +53,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun isDarkTheme(): Boolean {
-        return prefs.getBoolean("settings_dark_theme", true) // Default is dark theme
+        return prefs.getBoolean("settings_dark_theme", true)
     }
 
     fun setDarkTheme(isDark: Boolean) {
@@ -41,7 +61,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun getFontSize(): Float {
-        return prefs.getFloat("settings_font_size", 16f) // Default size: 16sp
+        return prefs.getFloat("settings_font_size", 16f)
     }
 
     fun setFontSize(scale: Float) {
@@ -49,7 +69,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun getWaterGoal(): Int {
-        return prefs.getInt("settings_water_goal", 2500) // Default 2500ml
+        return prefs.getInt("settings_water_goal", 2500)
     }
 
     fun setWaterGoal(goal: Int) {
@@ -57,7 +77,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun getExpenseBudget(): Double {
-        return prefs.getFloat("settings_ex_budget", 5000f).toDouble() // Default budget
+        return prefs.getFloat("settings_ex_budget", 5000f).toDouble()
     }
 
     fun setExpenseBudget(budget: Double) {
@@ -88,7 +108,6 @@ class SecurePrefHelper(context: Context) {
         prefs.edit().putBoolean("settings_biometric_enabled", enabled).apply()
     }
 
-    // --- New Preferences ---
     fun saveNotificationTune(uri: String) {
         prefs.edit().putString("notification_tune_uri", uri).apply()
     }
@@ -119,12 +138,28 @@ class SecurePrefHelper(context: Context) {
         prefs.edit().putBoolean("settings_welcome_sound", enabled).apply()
     }
 
+    fun saveGeminiApiKey(key: String) {
+        prefs.edit().putString("GEMINI_API_KEY", key).apply()
+    }
+
+    fun getGeminiApiKey(): String {
+        return prefs.getString("GEMINI_API_KEY", "") ?: ""
+    }
+
+    fun saveWeatherApiKey(key: String) {
+        prefs.edit().putString("WEATHER_API_KEY", key).apply()
+    }
+
+    fun getWeatherApiKey(): String {
+        return prefs.getString("WEATHER_API_KEY", "") ?: ""
+    }
+
     private fun hashString(input: String): String {
         return try {
             val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
             bytes.joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
-            input // Fallback
+            input
         }
     }
 }
