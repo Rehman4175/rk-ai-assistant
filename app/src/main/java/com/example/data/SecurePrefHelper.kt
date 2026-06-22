@@ -149,14 +149,15 @@ class SecurePrefHelper(context: Context) {
     fun getDbPassphrase(): ByteArray? {
         val base64 = prefs.getString("db_passphrase_v1", null) ?: return null
         return try {
-            android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+            android.util.Base64.decode(base64, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
+            android.util.Log.e("RKAI", "Failed to decode passphrase", e)
             null
         }
     }
 
     fun saveDbPassphrase(passphrase: ByteArray) {
-        val base64 = android.util.Base64.encodeToString(passphrase, android.util.Base64.DEFAULT)
+        val base64 = android.util.Base64.encodeToString(passphrase, android.util.Base64.NO_WRAP)
         prefs.edit().putString("db_passphrase_v1", base64).apply()
     }
 

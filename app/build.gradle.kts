@@ -34,8 +34,9 @@ android {
 
   buildTypes {
     release {
+      isMinifyEnabled = true
+      isShrinkResources = true
       isCrunchPngs = false
-      isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -71,6 +72,9 @@ android {
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
+  // Security Fix: Prevent sensitive API keys from being injected into BuildConfig
+  ignoreList.add("GEMINI_API_KEY")
+  ignoreList.add("WEATHER_API_KEY")
 }
 
 dependencies {

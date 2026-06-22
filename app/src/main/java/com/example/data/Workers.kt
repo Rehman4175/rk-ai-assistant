@@ -159,7 +159,7 @@ fun sendAndroidNotification(context: Context, id: Int, channelId: String, channe
             description = "RK Assistant alerts"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 500, 250, 500)
-            setBypassDnd(true)
+            setBypassDnd(false)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             
             if (customTuneUri.isNotBlank()) {

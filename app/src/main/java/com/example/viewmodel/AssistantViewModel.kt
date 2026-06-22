@@ -3,7 +3,6 @@ package com.example.viewmodel
 import java.io.InputStream
 import java.io.OutputStream
 import android.app.Application
-import com.example.BuildConfig
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -271,31 +270,23 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var tts: TextToSpeech? = null
 
     init {
-        try {
-            LocalLLMService.initialize(application)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Log the error but don't crash the app
-        }
-        isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
-
-        // Security Fix: Initialize GeminiService with key from EncryptedSharedPreferences
-        var geminiKey = prefs.getGeminiApiKey()
-        if (geminiKey.isBlank()) {
-            geminiKey = BuildConfig.GEMINI_API_KEY
-            if (geminiKey.isNotBlank() && !geminiKey.contains("YOUR_GEMINI_API_KEY")) {
-                prefs.saveGeminiApiKey(geminiKey)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                LocalLLMService.initialize(application)
+                withContext(Dispatchers.Main) {
+                    isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RKAI", "Local AI Init Error", e)
             }
         }
+
+        // Security: Initialize GeminiService with key from EncryptedSharedPreferences
+        val geminiKey = prefs.getGeminiApiKey()
         GeminiService.initialize(geminiKey)
 
-        // Weather Key initialization from BuildConfig if empty
-        if (prefs.getWeatherApiKey().isBlank()) {
-            val weatherKey = BuildConfig.WEATHER_API_KEY
-            if (weatherKey.isNotBlank() && !weatherKey.contains("YOUR_OPENWEATHER_API_KEY")) {
-                prefs.saveWeatherApiKey(weatherKey)
-            }
-        }
+        // Update online status
+        isOnline.value = geminiKey.isNotBlank()
 
         // Use Google TTS engine specifically for best Hindi/Indian English support
         tts = TextToSpeech(application, { status ->
