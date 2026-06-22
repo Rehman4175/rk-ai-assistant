@@ -111,6 +111,14 @@ class SecurePrefHelper(context: Context) {
         return savedHash == hashString(password)
     }
 
+    fun isWelcomeSoundEnabled(): Boolean {
+        return prefs.getBoolean("settings_welcome_sound", true)
+    }
+
+    fun setWelcomeSoundEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("settings_welcome_sound", enabled).apply()
+    }
+
     private fun hashString(input: String): String {
         return try {
             val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())

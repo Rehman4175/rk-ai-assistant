@@ -337,31 +337,32 @@ object GoogleSheetsService {
                 val mediaType = "application/json".toMediaType()
                 val body = jsonPayload.toRequestBody(mediaType)
                 
-                // Google Apps Script usually requires following redirects correctly.
                 val request = okhttp3.Request.Builder()
                     .url(scriptUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:100.0) Gecko/100.0 Firefox/100.0")
-                    .header("Accept", "application/json")
                     .post(body)
                     .build()
 
-                okHttpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: ""
-                    println("Sync Response Code: ${response.code}")
-                    println("Sync Response Body: $responseBody")
-                    
-                    // Google Apps Script success could be 200 or 302/301/307 (redirects)
-                    // With followRedirects(true), we expect 200 OK.
-                    // We also check if the body contains "Success" as defined in our GAS code.
-                    val isSuccess = response.isSuccessful || 
-                                    response.code in 300..308 || 
-                                    responseBody.contains("Success", ignoreCase = true)
-                    
-                    isSuccess
+                var response = okHttpClient.newCall(request).execute()
+                
+                // Manual Redirect Handling for Google Apps Script (302 Found)
+                if (response.code == 302 || response.code == 301 || response.code == 307 || response.code == 308) {
+                    val newUrl = response.header("Location")
+                    if (newUrl != null) {
+                        response.close()
+                        val redirectRequest = okhttp3.Request.Builder()
+                            .url(newUrl)
+                            .post(body) // Re-post the body to the redirected URL
+                            .build()
+                        response = okHttpClient.newCall(redirectRequest).execute()
+                    }
                 }
+
+                val responseBody = response.body?.string() ?: ""
+                val isSuccess = response.isSuccessful || responseBody.contains("Success", ignoreCase = true)
+                response.close()
+                isSuccess
             } catch (e: Exception) {
                 e.printStackTrace()
-                println("Sync Error: ${e.message}")
                 false
             }
         }

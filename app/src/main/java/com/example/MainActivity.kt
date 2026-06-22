@@ -74,6 +74,7 @@ class MainActivity : FragmentActivity() {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         perms.add(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                    perms.add(Manifest.permission.RECORD_AUDIO)
                     perms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
                     permissionsLauncher.launch(perms.toTypedArray())

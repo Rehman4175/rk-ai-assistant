@@ -23,6 +23,7 @@ import android.net.NetworkRequest
 import android.widget.Toast
 import com.example.data.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -72,6 +73,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val pinError = MutableStateFlow<String?>(null)
     val isBiometricEnabled = MutableStateFlow(prefs.isBiometricEnabled())
     val isAppLockActive = MutableStateFlow(prefs.isAppLockActive())
+    val isWelcomeSoundEnabled = MutableStateFlow(prefs.isWelcomeSoundEnabled())
 
     // Private Space Lock State
     val isPrivateSpaceLocked = MutableStateFlow(prefs.hasPrivateSpacePassword())
@@ -493,9 +495,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isAppLockActive.value = enabled
     }
 
+    fun toggleWelcomeSound(enabled: Boolean) {
+        prefs.setWelcomeSoundEnabled(enabled)
+        isWelcomeSoundEnabled.value = enabled
+    }
+
     fun unlockWithBiometric() {
         isLocked.value = false
-        speak("Welcome back RK")
+        if (isWelcomeSoundEnabled.value) {
+            speak("Welcome back RK")
+        }
     }
 
     fun setOrUpdatePin(pin: String) {
@@ -516,7 +525,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return if (prefs.verifyPin(pin)) {
             isLocked.value = false
             pinError.value = null
-            speak("Welcome back RK")
+            if (isWelcomeSoundEnabled.value) {
+                speak("Welcome back RK")
+            }
             true
         } else {
             pinError.value = "Incorrect PIN. Try again."
@@ -867,9 +878,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                             Toast.makeText(getApplication(), errorMsg, Toast.LENGTH_SHORT).show()
                         }
                     }
-                ) ?: (if (isLocalAiAvailable.value) LocalLLMService.generateResponse(userPrompt, getApplication()) else null)
+                ) ?: (if (isLocalAiAvailable.value) LocalLLMService.generateResponse("System: $systemContext\nUser: $userPrompt\nRK:", getApplication()) else null)
             } else if (isLocalAiAvailable.value) {
-                LocalLLMService.generateResponse("System: $systemContext\nUser asks: $userPrompt", getApplication())
+                LocalLLMService.generateResponse("System: $systemContext\nUser: $userPrompt\nRK:", getApplication())
             } else {
                 "Assalamualaikum! Main RK hoon. Abhi internet offline hai aur local model bhi nahi mila. Please model download karein ya internet on karein."
             }
@@ -1238,36 +1249,144 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // --- Backups ---
     fun generateBackup() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             val root = JSONObject()
+            
+            // Collect all data from flows
+            root.put("tasks", JSONArray(tasks.value.map { t ->
+                JSONObject().apply {
+                    put("title", t.title); put("isCompleted", t.isCompleted); put("priority", t.priority)
+                    put("label", t.label); put("dueDate", t.dueDate); put("notes", t.notes)
+                    put("isRepeating", t.isRepeating); put("repeatInterval", t.repeatInterval)
+                    put("createdDate", t.createdDate); put("doneDate", t.doneDate)
+                    put("isDeleted", t.isDeleted); put("remarks", t.remarks); put("timestamp", t.timestamp)
+                }
+            }))
+            
+            root.put("reminders", JSONArray(reminders.value.map { r ->
+                JSONObject().apply {
+                    put("title", r.title); put("dueDateTime", r.dueDateTime); put("recurrence", r.recurrence)
+                    put("isAcknowledged", r.isAcknowledged); put("createdAt", r.createdAt)
+                    put("chatId", r.chatId); put("lastFired", r.lastFired); put("remarks", r.remarks)
+                    put("isDeleted", r.isDeleted)
+                }
+            }))
+            
+            root.put("expenses", JSONArray(expenses.value.map { e ->
+                JSONObject().apply {
+                    put("amount", e.amount); put("title", e.title); put("isIncome", e.isIncome)
+                    put("category", e.category); put("dateString", e.dateString); put("timestamp", e.timestamp)
+                    put("isDeleted", e.isDeleted); put("remarks", e.remarks)
+                }
+            }))
 
-            val taskArr = JSONArray()
-            tasks.value.forEach { t ->
-                val obj = JSONObject()
-                obj.put("title", t.title); obj.put("isCompleted", t.isCompleted)
-                obj.put("priority", t.priority); obj.put("label", t.label)
-                obj.put("dueDate", t.dueDate); obj.put("notes", t.notes)
-                obj.put("isRepeating", t.isRepeating); obj.put("repeatInterval", t.repeatInterval)
-                taskArr.put(obj)
-            }
-            root.put("tasks", taskArr)
+            root.put("habits", JSONArray(habits.value.map { h ->
+                JSONObject().apply {
+                    put("name", h.name); put("type", h.type); put("emoji", h.emoji)
+                    put("loggedDaysCommaSeparated", h.loggedDaysCommaSeparated)
+                    put("streakCount", h.streakCount); put("bestStreak", h.bestStreak)
+                    put("lastLoggedTimestamp", h.lastLoggedTimestamp); put("targetPerDay", h.targetPerDay)
+                    put("isDeleted", h.isDeleted); put("remarks", h.remarks)
+                }
+            }))
 
-            val notesArr = JSONArray()
-            notes.value.forEach { n ->
-                val obj = JSONObject()
-                obj.put("title", n.title); obj.put("content", n.content)
-                obj.put("isPinned", n.isPinned); obj.put("isFavorite", n.isFavorite); obj.put("tag", n.tag)
-                notesArr.put(obj)
-            }
-            root.put("notes", notesArr)
+            root.put("waterLogs", JSONArray(waterLogs.value.map { w ->
+                JSONObject().apply {
+                    put("mlAmount", w.mlAmount); put("timestamp", w.timestamp)
+                    put("dayString", w.dayString); put("isDeleted", w.isDeleted); put("remarks", w.remarks)
+                }
+            }))
 
-            val memoryArr = JSONArray()
-            memories.value.forEach { m ->
-                val obj = JSONObject()
-                obj.put("content", m.content); obj.put("category", m.category)
-                memoryArr.put(obj)
-            }
-            root.put("memories", memoryArr)
+            root.put("bills", JSONArray(bills.value.map { b ->
+                JSONObject().apply {
+                    put("name", b.name); put("amount", b.amount); put("category", b.category)
+                    put("dueDayOfMonth", b.dueDayOfMonth); put("paidMonthsCommaSeparated", b.paidMonthsCommaSeparated)
+                    put("isAutoPay", b.isAutoPay); put("paymentMethod", b.paymentMethod); put("notes", b.notes)
+                    put("createdAt", b.createdAt); put("isDeleted", b.isDeleted); put("remarks", b.remarks)
+                }
+            }))
+
+            root.put("events", JSONArray(events.value.map { v ->
+                JSONObject().apply {
+                    put("title", v.title); put("dateString", v.dateString); put("timeString", v.timeString)
+                    put("location", v.location); put("notes", v.notes); put("type", v.type)
+                    put("isAiGenerated", v.isAiGenerated); put("createdAt", v.createdAt)
+                    put("remindDayBefore", v.remindDayBefore); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
+                }
+            }))
+
+            root.put("diaryEntries", JSONArray(diaryEntries.value.map { d ->
+                JSONObject().apply {
+                    put("dateString", d.dateString); put("text", d.text); put("mood", d.mood)
+                    put("photoPath", d.photoPath); put("timestamp", d.timestamp); put("isDeleted", d.isDeleted)
+                    put("remarks", d.remarks)
+                }
+            }))
+
+            root.put("notes", JSONArray(notes.value.map { n ->
+                JSONObject().apply {
+                    put("title", n.title); put("content", n.content); put("isPinned", n.isPinned)
+                    put("isFavorite", n.isFavorite); put("timestamp", n.timestamp); put("tag", n.tag)
+                    put("isDeleted", n.isDeleted); put("remarks", n.remarks)
+                }
+            }))
+
+            root.put("memories", JSONArray(memories.value.map { m ->
+                JSONObject().apply {
+                    put("content", m.content); put("category", m.category); put("timestamp", m.timestamp)
+                    put("isDeleted", m.isDeleted); put("remarks", m.remarks)
+                }
+            }))
+
+            root.put("smartReminders", JSONArray(smartReminders.value.map { s ->
+                JSONObject().apply {
+                    put("title", s.title); put("dueDateTime", s.dueDateTime); put("priority", s.priority)
+                    put("repeatIntervalMinutes", s.repeatIntervalMinutes); put("maxRepeats", s.maxRepeats)
+                    put("currentRepeat", s.currentRepeat); put("isAcknowledged", s.isAcknowledged)
+                    put("isDeleted", s.isDeleted); put("remarks", s.remarks)
+                }
+            }))
+
+            root.put("voiceNotes", JSONArray(voiceNotes.value.map { v ->
+                JSONObject().apply {
+                    put("filePath", v.filePath); put("transcription", v.transcription); put("duration", v.duration)
+                    put("timestamp", v.timestamp); put("isTranscribed", v.isTranscribed); put("status", v.status)
+                    put("category", v.category); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
+                }
+            }))
+
+            root.put("goals", JSONArray(goals.value.map { g ->
+                JSONObject().apply {
+                    put("title", g.title); put("progress", g.progress); put("isDone", g.isDone)
+                    put("deadline", g.deadline); put("createdAt", g.createdAt); put("milestones", g.milestones)
+                    put("isDeleted", g.isDeleted); put("remarks", g.remarks); put("timestamp", g.timestamp)
+                }
+            }))
+
+            root.put("recurringReminders", JSONArray(recurringReminders.value.map { r ->
+                JSONObject().apply {
+                    put("title", r.title); put("type", r.type); put("time", r.time)
+                    put("isActive", r.isActive); put("createdAt", r.createdAt); put("isDeleted", r.isDeleted)
+                    put("remarks", r.remarks)
+                }
+            }))
+
+            root.put("remindLinks", JSONArray(remindLinks.value.map { l ->
+                JSONObject().apply {
+                    put("chatId", l.chatId); put("text", l.text); put("link", l.link)
+                    put("dueDateTime", l.dueDateTime); put("originalMsgId", l.originalMsgId)
+                    put("isAcknowledged", l.isAcknowledged); put("createdAt", l.createdAt)
+                    put("isDeleted", l.isDeleted); put("remarks", l.remarks)
+                }
+            }))
+
+            root.put("privateSpaceItems", JSONArray(privateSpaceItems.value.map { p ->
+                JSONObject().apply {
+                    put("title", p.title); put("content", p.content); put("category", p.category)
+                    put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
+                    put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
+                }
+            }))
 
             backupDataJson.value = root.toString(2)
         }
@@ -1277,41 +1396,211 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return try {
             val root = JSONObject(jsonString)
             viewModelScope.launch {
+                // Restore each category safely
                 if (root.has("tasks")) {
                     val arr = root.getJSONArray("tasks")
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         repository.insertTask(Task(
-                            title = obj.getString("title"),
-                            isCompleted = obj.optBoolean("isCompleted", false),
-                            priority = obj.optString("priority", "Medium"),
-                            label = obj.optString("label", "General"),
-                            dueDate = obj.optString("dueDate", ""),
-                            notes = obj.optString("notes", ""),
-                            isRepeating = obj.optBoolean("isRepeating", false),
-                            repeatInterval = obj.optString("repeatInterval", "None")
+                            title = obj.getString("title"), isCompleted = obj.optBoolean("isCompleted"),
+                            priority = obj.optString("priority", "Medium"), label = obj.optString("label", "General"),
+                            dueDate = obj.optString("dueDate"), notes = obj.optString("notes"),
+                            isRepeating = obj.optBoolean("isRepeating"), repeatInterval = obj.optString("repeatInterval"),
+                            createdDate = obj.optString("createdDate"), doneDate = obj.optString("doneDate"),
+                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
                         ))
                     }
                 }
+                
+                if (root.has("reminders")) {
+                    val arr = root.getJSONArray("reminders")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertReminder(Reminder(
+                            title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
+                            recurrence = obj.optString("recurrence", "None"), isAcknowledged = obj.optBoolean("isAcknowledged"),
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), chatId = obj.optString("chatId"),
+                            lastFired = obj.optLong("lastFired"), remarks = obj.optString("remarks"), isDeleted = obj.optBoolean("isDeleted")
+                        ))
+                    }
+                }
+
+                if (root.has("expenses")) {
+                    val arr = root.getJSONArray("expenses")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertExpense(Expense(
+                            amount = obj.getDouble("amount"), title = obj.getString("title"),
+                            isIncome = obj.optBoolean("isIncome"), category = obj.optString("category", "Food"),
+                            dateString = obj.getString("dateString"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("habits")) {
+                    val arr = root.getJSONArray("habits")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertHabit(Habit(
+                            name = obj.getString("name"), type = obj.optString("type", "Water"),
+                            emoji = obj.optString("emoji", "✅"), loggedDaysCommaSeparated = obj.optString("loggedDaysCommaSeparated"),
+                            streakCount = obj.optInt("streakCount"), bestStreak = obj.optInt("bestStreak"),
+                            lastLoggedTimestamp = obj.optLong("lastLoggedTimestamp"), targetPerDay = obj.optString("targetPerDay"),
+                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("waterLogs")) {
+                    val arr = root.getJSONArray("waterLogs")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertWaterLog(WaterLog(
+                            mlAmount = obj.getInt("mlAmount"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            dayString = obj.getString("dayString"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("bills")) {
+                    val arr = root.getJSONArray("bills")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertBill(Bill(
+                            name = obj.getString("name"), amount = obj.getDouble("amount"), category = obj.optString("category", "Mobile"),
+                            dueDayOfMonth = obj.optInt("dueDayOfMonth", 1), paidMonthsCommaSeparated = obj.optString("paidMonthsCommaSeparated"),
+                            isAutoPay = obj.optBoolean("isAutoPay"), paymentMethod = obj.optString("paymentMethod"), notes = obj.optString("notes"),
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("events")) {
+                    val arr = root.getJSONArray("events")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertEvent(CalendarEvent(
+                            title = obj.getString("title"), dateString = obj.getString("dateString"),
+                            timeString = obj.optString("timeString", "09:00"), location = obj.optString("location"),
+                            notes = obj.optString("notes"), type = obj.optString("type", "Meeting"),
+                            isAiGenerated = obj.optBoolean("isAiGenerated"), createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                            remindDayBefore = obj.optBoolean("remindDayBefore", true), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("diaryEntries")) {
+                    val arr = root.getJSONArray("diaryEntries")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertDiaryEntry(DiaryEntry(
+                            dateString = obj.getString("dateString"), text = obj.getString("text"),
+                            mood = obj.optString("mood", "Neutral"), photoPath = obj.optString("photoPath"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
                 if (root.has("notes")) {
                     val arr = root.getJSONArray("notes")
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         repository.insertNote(QuickNote(
                             title = obj.getString("title"), content = obj.getString("content"),
-                            isPinned = obj.optBoolean("isPinned", false),
-                            isFavorite = obj.optBoolean("isFavorite", false),
-                            tag = obj.optString("tag", "Notes")
+                            isPinned = obj.optBoolean("isPinned"), isFavorite = obj.optBoolean("isFavorite"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), tag = obj.optString("tag", "Notes"),
+                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
                         ))
                     }
                 }
+
                 if (root.has("memories")) {
                     val arr = root.getJSONArray("memories")
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
                         repository.insertMemory(PersonalMemory(
-                            content = obj.getString("content"),
-                            category = obj.optString("category", "General")
+                            content = obj.getString("content"), category = obj.optString("category", "General"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("smartReminders")) {
+                    val arr = root.getJSONArray("smartReminders")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertSmartReminder(SmartReminder(
+                            title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
+                            priority = obj.getString("priority"), repeatIntervalMinutes = obj.getInt("repeatIntervalMinutes"),
+                            maxRepeats = obj.getInt("maxRepeats"), currentRepeat = obj.optInt("currentRepeat"),
+                            isAcknowledged = obj.optBoolean("isAcknowledged"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("voiceNotes")) {
+                    val arr = root.getJSONArray("voiceNotes")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertVoiceNote(VoiceNote(
+                            filePath = obj.getString("filePath"), transcription = obj.getString("transcription"),
+                            duration = obj.getLong("duration"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            isTranscribed = obj.optBoolean("isTranscribed"), status = obj.optString("status", "Success"),
+                            category = obj.optString("category", "General"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("goals")) {
+                    val arr = root.getJSONArray("goals")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertGoal(Goal(
+                            title = obj.getString("title"), progress = obj.optInt("progress"),
+                            isDone = obj.optBoolean("isDone"), deadline = obj.optString("deadline"),
+                            createdAt = obj.optString("createdAt"), milestones = obj.optString("milestones"),
+                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                        ))
+                    }
+                }
+
+                if (root.has("recurringReminders")) {
+                    val arr = root.getJSONArray("recurringReminders")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertRecurringReminder(RecurringReminder(
+                            title = obj.getString("title"), type = obj.getString("type"),
+                            time = obj.getString("time"), isActive = obj.optBoolean("isActive", true),
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("remindLinks")) {
+                    val arr = root.getJSONArray("remindLinks")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertRemindLink(RemindLink(
+                            chatId = obj.getLong("chatId"), text = obj.getString("text"),
+                            link = obj.getString("link"), dueDateTime = obj.getString("dueDateTime"),
+                            originalMsgId = obj.optLong("originalMsgId"), isAcknowledged = obj.optBoolean("isAcknowledged"),
+                            createdAt = obj.optString("createdAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                        ))
+                    }
+                }
+
+                if (root.has("privateSpaceItems")) {
+                    val arr = root.getJSONArray("privateSpaceItems")
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        repository.insertPrivateSpaceItem(PrivateSpaceItem(
+                            title = obj.getString("title"), content = obj.getString("content"),
+                            category = obj.optString("category", "note"), isPinned = obj.optBoolean("isPinned"),
+                            photoPath = obj.optString("photoPath"), createdAt = obj.optString("createdAt"),
+                            modifiedAt = obj.optString("modifiedAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
                         ))
                     }
                 }
@@ -1321,29 +1610,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun exportBackupJson(outputStream: OutputStream) {
-        try {
-            val root = JSONObject()
-            val taskArr = JSONArray()
-            tasks.value.forEach { t ->
-                val obj = JSONObject()
-                obj.put("title", t.title); obj.put("isCompleted", t.isCompleted)
-                obj.put("priority", t.priority); obj.put("label", t.label)
-                obj.put("dueDate", t.dueDate); obj.put("notes", t.notes)
-                obj.put("isRepeating", t.isRepeating); obj.put("repeatInterval", t.repeatInterval)
-                taskArr.put(obj)
-            }
-            root.put("tasks", taskArr)
-            val notesArr = JSONArray()
-            notes.value.forEach { n ->
-                val obj = JSONObject()
-                obj.put("title", n.title); obj.put("content", n.content)
-                obj.put("isPinned", n.isPinned); obj.put("isFavorite", n.isFavorite); obj.put("tag", n.tag)
-                notesArr.put(obj)
-            }
-            root.put("notes", notesArr)
-            outputStream.write(root.toString(2).toByteArray(Charsets.UTF_8))
-            outputStream.close()
-        } catch (e: Exception) { e.printStackTrace() }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                generateBackup()
+                while (backupDataJson.value.isEmpty()) { delay(100) }
+                outputStream.write(backupDataJson.value.toByteArray(Charsets.UTF_8))
+                outputStream.close()
+            } catch (e: Exception) { e.printStackTrace() }
+        }
     }
 
     fun importBackupJson(inputStream: InputStream): Boolean {

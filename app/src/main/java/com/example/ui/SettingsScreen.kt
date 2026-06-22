@@ -88,6 +88,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
     var feedbackMsg by remember { mutableStateOf<String?>(null) }
 
     val isAppLockActive by viewModel.isAppLockActive.collectAsState()
+    val isWelcomeSoundEnabled by viewModel.isWelcomeSoundEnabled.collectAsState()
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
     var showPinDialog by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
@@ -373,6 +374,32 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                                 )
                             )
                         }
+                    }
+
+                    Divider(color = BorderColor, thickness = 0.5.dp)
+
+                    // Welcome Sound Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MusicNote, null, tint = if (isWelcomeSoundEnabled) NeonCyan else SoftTextGray)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text("Welcome Greeting", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Speak 'Welcome back RK' on unlock", color = SoftTextGray, fontSize = 11.sp)
+                            }
+                        }
+                        Switch(
+                            checked = isWelcomeSoundEnabled,
+                            onCheckedChange = { viewModel.toggleWelcomeSound(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = NeonCyan,
+                                checkedTrackColor = NeonCyan.copy(alpha = 0.5f)
+                            )
+                        )
                     }
 
                     Divider(color = BorderColor, thickness = 0.5.dp)
@@ -731,8 +758,46 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+                }
+            }
 
-                    Divider(color = BorderColor, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // HELP & COMMANDS
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(CardBackgroundGlass)
+                    .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "HELP & COMMANDS",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    var showCommandList by remember { mutableStateOf(false) }
+                    
+                    Button(
+                        onClick = { showCommandList = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                    ) {
+                        Icon(Icons.Default.Settings, null, tint = NeonCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("VIEW COMMAND LIST", color = Color.White)
+                    }
+
+                    if (showCommandList) {
+                        CommandListDialog(onDismiss = { showCommandList = false })
+                    }
+
+                    Divider(color = BorderColor, thickness = 0.5.dp)
 
                     Text(
                         text = "DATABASE JSON BACKUP TERMINAL",
@@ -764,6 +829,57 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun CommandListDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("RK COMMAND CONSOLE", color = NeonCyan, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CommandListItem("task [text]", "Naya task add karne ke liye. (Ex: task gym jana hai)")
+                CommandListItem("done [id]", "Task complete karne ke liye ID ke saath.")
+                CommandListItem("reminder [time] [text]", "Timer based reminder. (Ex: remind 10 min chai)")
+                CommandListItem("expense [amt] [item]", "Kharcha add karein. (Ex: expense 50 juice)")
+                CommandListItem("water [ml]", "Paani peena log karein. (Ex: water 250)")
+                CommandListItem("diary [text]", "Aaj ki diary entry likhein.")
+                CommandListItem("habit [name]", "Nayi habit track karna shuru karein.")
+                CommandListItem("hdone [name]", "Habit complete mark karein.")
+                CommandListItem("sync now", "Data Google Sheets par sync karein.")
+                CommandListItem("help", "Saari commands dekhne ke liye.")
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Tip: Aap seedha Gemini se bhi pooch sakte hain: 'Aaj kitna kharcha hua?'",
+                    color = NeonGreen,
+                    fontSize = 11.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)) {
+                Text("SAMAJH GAYA", color = Color.Black)
+            }
+        },
+        containerColor = Color(0xFF1C1E32)
+    )
+}
+
+@Composable
+fun CommandListItem(cmd: String, desc: String) {
+    Column {
+        Text(cmd, color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+        Text(desc, color = SoftTextGray, fontSize = 12.sp)
+        Divider(color = BorderColor.copy(alpha = 0.3f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
