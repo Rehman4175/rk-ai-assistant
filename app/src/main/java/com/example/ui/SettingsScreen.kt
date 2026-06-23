@@ -1,4 +1,8 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
+
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 
 import android.app.Activity
 import android.content.Intent
@@ -42,8 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.viewmodel.AssistantViewModel
-import com.example.ui.theme.*
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -310,7 +312,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                             if (geminiKeyInput != viewModel.prefs.getGeminiApiKey()) {
                                 IconButton(onClick = {
                                     viewModel.prefs.saveGeminiApiKey(geminiKeyInput)
-                                    com.example.data.GeminiService.initialize(geminiKeyInput)
+                                    GeminiService.initialize(geminiKeyInput)
                                     Toast.makeText(context, "Gemini Key Updated!", Toast.LENGTH_SHORT).show()
                                 }) {
                                     Icon(Icons.Default.Upload, null, tint = NeonCyan)
@@ -412,7 +414,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     )
 
                     // Fingerprint/Biometric Status
-                    val biometricHelper = remember { com.example.data.BiometricHelper(context) }
+                    val biometricHelper = remember { BiometricHelper(context) }
                     val isBioAvailable = remember { biometricHelper.isBiometricAvailable() }
                     
                     Row(

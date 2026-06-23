@@ -1,4 +1,4 @@
-package com.example.viewmodel
+package com.aistudio.rkaiassistant.viewmodel
 
 import java.io.InputStream
 import java.io.OutputStream
@@ -20,7 +20,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
 import android.widget.Toast
-import com.example.data.*
+import com.aistudio.rkaiassistant.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine

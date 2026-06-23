@@ -1,4 +1,4 @@
-package com.example
+package com.aistudio.rkaiassistant
 
 import android.Manifest
 import android.os.Build
@@ -31,14 +31,14 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
-import com.example.ui.*
-import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.SlateDarkBackground
-import com.example.ui.theme.SoftTextGray
-import com.example.viewmodel.AppScreen
-import com.example.viewmodel.AssistantViewModel
-import com.example.data.scheduleAllWorkers
+import com.aistudio.rkaiassistant.ui.*
+import com.aistudio.rkaiassistant.ui.theme.MyApplicationTheme
+import com.aistudio.rkaiassistant.ui.theme.NeonCyan
+import com.aistudio.rkaiassistant.ui.theme.SlateDarkBackground
+import com.aistudio.rkaiassistant.ui.theme.SoftTextGray
+import com.aistudio.rkaiassistant.viewmodel.AppScreen
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
+import com.aistudio.rkaiassistant.data.scheduleAllWorkers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds

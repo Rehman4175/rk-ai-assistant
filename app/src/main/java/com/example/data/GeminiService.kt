@@ -1,4 +1,4 @@
-package com.example.data
+package com.aistudio.rkaiassistant.data
 
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi

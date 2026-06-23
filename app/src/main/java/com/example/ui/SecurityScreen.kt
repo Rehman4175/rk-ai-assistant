@@ -1,4 +1,4 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
 
 import android.content.Context
 import android.content.ContextWrapper
@@ -19,19 +19,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
-import com.example.data.BiometricHelper
+import com.aistudio.rkaiassistant.data.BiometricHelper
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.SlateDarkBackground
-import com.example.ui.theme.SoftTextGray
-import com.example.viewmodel.AssistantViewModel
-
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aistudio.rkaiassistant.ui.theme.NeonCyan
+import com.aistudio.rkaiassistant.ui.theme.SlateDarkBackground
+import com.aistudio.rkaiassistant.ui.theme.SoftTextGray
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 // ...
 @Composable
 fun SecurityScreen(viewModel: AssistantViewModel) {

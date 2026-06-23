@@ -1,4 +1,4 @@
-package com.example.data
+package com.aistudio.rkaiassistant.data
 
 import android.app.NotificationManager
 import android.content.BroadcastReceiver

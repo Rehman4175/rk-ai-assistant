@@ -1,4 +1,4 @@
-package com.example.ui.theme
+package com.aistudio.rkaiassistant.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

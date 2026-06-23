@@ -1,6 +1,9 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
 
-import com.example.ui.theme.*
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,8 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.GeminiService
-import com.example.viewmodel.AssistantViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)

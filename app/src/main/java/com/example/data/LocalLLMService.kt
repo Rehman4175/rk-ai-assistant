@@ -1,4 +1,4 @@
-package com.example.data
+package com.aistudio.rkaiassistant.data
 
 import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference

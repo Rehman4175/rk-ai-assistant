@@ -1,4 +1,8 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
+
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 
 import android.Manifest
 import android.content.Context
@@ -32,9 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.VoiceNote
-import com.example.ui.theme.*
-import com.example.viewmodel.AssistantViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File

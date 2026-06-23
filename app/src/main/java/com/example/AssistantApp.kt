@@ -1,8 +1,8 @@
-package com.example
+package com.aistudio.rkaiassistant
 
 import android.app.Application
-import com.example.data.SecurePrefHelper
-import com.example.data.GeminiService
+import com.aistudio.rkaiassistant.data.SecurePrefHelper
+import com.aistudio.rkaiassistant.data.GeminiService
 import android.util.Log
 
 class AssistantApp : Application() {

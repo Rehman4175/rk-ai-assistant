@@ -1,7 +1,9 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
 
 import com.aistudio.rkaiassistant.R
-import com.example.ui.theme.*
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -38,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.viewmodel.AssistantViewModel
 import java.io.ByteArrayOutputStream
 import java.util.*
 
@@ -345,7 +346,7 @@ fun ChatScreen(viewModel: AssistantViewModel) {
 }
 
 @Composable
-fun ChatBubble(message: com.example.data.ChatMessage, onCopy: () -> Unit) {
+fun ChatBubble(message: ChatMessage, onCopy: () -> Unit) {
     val isUser = message.sender == "User"
     val bubbleColor = if (isUser) Color(0xFF1E3A5F) else Color(0xFF1B1D2F)
     val align = if (isUser) Alignment.End else Alignment.Start

@@ -1,6 +1,8 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
 
-import com.example.ui.theme.*
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,8 +24,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.Task
-import com.example.viewmodel.AssistantViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

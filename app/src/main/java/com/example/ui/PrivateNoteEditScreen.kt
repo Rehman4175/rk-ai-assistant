@@ -1,4 +1,8 @@
-package com.example.ui
+package com.aistudio.rkaiassistant.ui
+
+import com.aistudio.rkaiassistant.ui.theme.*
+import com.aistudio.rkaiassistant.data.*
+import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,10 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
-import com.example.data.PrivateSpaceItem
-import com.example.viewmodel.AssistantViewModel
-import com.example.ui.theme.*
-import com.example.viewmodel.AppScreen
 
 @Composable
 fun PrivateNoteEditScreen(viewModel: AssistantViewModel) {
