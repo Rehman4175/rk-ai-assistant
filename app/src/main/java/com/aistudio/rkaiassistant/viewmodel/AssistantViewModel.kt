@@ -12,10 +12,6 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.location.Location
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
@@ -42,7 +38,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val repository: DatabaseRepository by lazy { DatabaseRepository(db) }
     val prefs = SecurePrefHelper(application)
     private val cryptoManager = CryptoManager()
-    private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
 
     // Gold Calculator State
     val goldWeight = MutableStateFlow("")
@@ -236,6 +231,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // AI state
     val aiIsGenerating = MutableStateFlow(false)
     val textToSpeechEnabled = MutableStateFlow(true)
+    val isSpeaking = MutableStateFlow(false)
     val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
     val isLocalAiAvailable = MutableStateFlow(false)
     val isImportingModel = MutableStateFlow(false)
@@ -366,6 +362,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun speak(text: String, onFinished: (() -> Unit)? = null) {
         if (textToSpeechEnabled.value) {
+            isSpeaking.value = true
             // Enhanced phonetic processing for smoother Hindi/Hinglish delivery
             val processedText = text
                 .replace("Assalamualaikum", "Assalam-o-alaikum")
@@ -380,20 +377,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 .replace("kya ", "kya, ")
                 .replace("hoon", "hoon.")
             
-            if (onFinished != null) {
-                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {
-                        viewModelScope.launch(Dispatchers.Main) { onFinished() }
+            val listener = object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    viewModelScope.launch(Dispatchers.Main) { isSpeaking.value = true }
+                }
+                override fun onDone(utteranceId: String?) {
+                    viewModelScope.launch(Dispatchers.Main) { 
+                        isSpeaking.value = false
+                        onFinished?.invoke() 
                     }
-                    override fun onError(utteranceId: String?) {}
-                })
-                val params = android.os.Bundle()
-                params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "id")
-                tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, params, "id")
-            } else {
-                tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, null)
+                }
+                override fun onError(utteranceId: String?) {
+                    viewModelScope.launch(Dispatchers.Main) { isSpeaking.value = false }
+                }
             }
+            
+            tts?.setOnUtteranceProgressListener(listener)
+            
+            val params = android.os.Bundle()
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "id")
+            tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, params, "id")
         } else {
             onFinished?.invoke()
         }
@@ -641,36 +644,53 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun parseAndAddSmartReminder(text: String) {
         viewModelScope.launch {
+            jarvisStatus.value = "Analyzing context..."
+            
+            // Try AI parsing first if online
+            if (isNetworkAvailable() && isOnline.value) {
+                val aiResult = trySmartAiParsing("remind me to $text")
+                if (aiResult != null) {
+                    speak("System update: $aiResult")
+                    return@launch
+                }
+            }
+
+            // Fallback to enhanced local parsing
             val nowMs = System.currentTimeMillis()
-            var calculatedTime = nowMs + 3600000
+            var calculatedTime = nowMs + 3600000 // Default 1 hour
             var cleanTitle = text
             val lowText = text.lowercase()
 
-            when {
-                lowText.contains("tomorrow") -> {
-                    cleanTitle = text.replace("tomorrow", "", ignoreCase = true).trim()
-                    calculatedTime = nowMs + 86400000
-                }
-                lowText.contains("hours") || lowText.contains("hour") -> {
-                    val match = Regex("(\\d+)\\s*(hours|hour)").find(lowText)
-                    if (match != null) {
-                        val count = match.groupValues[1].toInt()
-                        calculatedTime = nowMs + (count * 3600 * 1000L)
-                        cleanTitle = text.replace(match.value, "", ignoreCase = true).trim()
-                    }
-                }
-                lowText.contains("minutes") || lowText.contains("mins") || lowText.contains("min") -> {
-                    val match = Regex("(\\d+)\\s*(minutes|mins|min)").find(lowText)
-                    if (match != null) {
-                        val count = match.groupValues[1].toInt()
-                        calculatedTime = nowMs + (count * 60 * 1000L)
-                        cleanTitle = text.replace(match.value, "", ignoreCase = true).trim()
-                    }
+            val timeUnits = mapOf(
+                "minute" to 60000L, "minutes" to 60000L, "min" to 60000L, "mins" to 60000L,
+                "hour" to 3600000L, "hours" to 3600000L, "h" to 3600000L,
+                "day" to 86400000L, "days" to 86400000L
+            )
+
+            var foundTime = false
+            for ((unit, ms) in timeUnits) {
+                val regex = Regex("(\\d+)\\s*$unit")
+                val match = regex.find(lowText)
+                if (match != null) {
+                    val count = match.groupValues[1].toLong()
+                    calculatedTime = nowMs + (count * ms)
+                    cleanTitle = text.replace(match.value, "", ignoreCase = true).trim()
+                    foundTime = true
+                    break
                 }
             }
-            val id = repository.insertReminder(Reminder(title = cleanTitle.ifBlank { text }, dueDateTime = calculatedTime))
-            AlarmHelper.scheduleExactAlarm(getApplication(), id.toInt(), calculatedTime, cleanTitle.ifBlank { text })
-            speak("Reminder set: $cleanTitle")
+            
+            if (!foundTime && lowText.contains("tomorrow")) {
+                calculatedTime = nowMs + 86400000
+                cleanTitle = text.replace("tomorrow", "", ignoreCase = true).trim()
+            }
+
+            val finalTitle = cleanTitle.ifBlank { text }.replaceFirstChar { it.uppercase() }
+            val id = repository.insertReminder(Reminder(title = finalTitle, dueDateTime = calculatedTime))
+            AlarmHelper.scheduleExactAlarm(getApplication(), id.toInt(), calculatedTime, finalTitle)
+            
+            val response = "Reminder set Boss: $finalTitle. I will notify you at ${SimpleDateFormat("hh:mm a", Locale.US).format(Date(calculatedTime))}."
+            speak(response)
         }
     }
 
@@ -833,8 +853,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val pending = allTasks.size - completed
         val completionRate = if (allTasks.isNotEmpty()) (completed * 100 / allTasks.size) else 0
         
-        // Habits
-        val habitStreaks = habits.value.joinToString { "${it.name}: ${it.streakCount} days" }
+        // Habits & Gamification (Derived)
+        val habitData = habits.value.map { 
+            val totalLogged = it.loggedDaysCommaSeparated.split(",").count { d -> d.isNotBlank() }
+            val xp = (totalLogged * 10) + (it.streakCount * 50)
+            val level = (xp / 500) + 1
+            "${it.name} (Streak: ${it.streakCount}, Level: $level, XP: $xp)"
+        }.joinToString(", ")
         
         // Bills
         val pendingBills = bills.value.count { !it.paidMonthsCommaSeparated.contains(currentMonth) }
@@ -847,9 +872,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             [USER DATA SUMMARY - $today]
             - Expenses this month: Rs $totalSpend (Top category: $topCategory)
             - Task Stats: $pending pending, $completed completed ($completionRate% completion rate)
-            - Habit Streaks: $habitStreaks
+            - Habit Progress: $habitData
             - Bills pending this month: $pendingBills
             - Water today: ${waterIntake}ml / ${waterGoal}ml
+            - User Level: ${habits.value.sumOf { (it.loggedDaysCommaSeparated.split(",").count { d -> d.isNotBlank() } * 10) + (it.streakCount * 50) } / 1000 + 1}
         """.trimIndent()
     }
 
@@ -889,17 +915,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             val dataContext = generateDataContext()
             val allMemoryFacts = memories.value.joinToString("\n") { "- ${it.category}: ${it.content}" }
             val systemContext = """
-                You are RK, a smart personal AI assistant. Introduce yourself as "Main RK, aapka personal voice assistant hoon".
-                You have access to the user's data summarized below. Answer their questions accurately based on this data.
-                If they ask about their habits, spending, or tasks, use the provided numbers to give insights.
+                You are RK, a sophisticated and highly intelligent personal AI assistant, similar to Jarvis from Iron Man. 
+                Your primary objective is to assist 'Boss' with efficiency, loyalty, and a touch of professional wit.
                 
+                PERSONALITY:
+                - Address the user as 'Boss' or 'Sir'.
+                - Your tone is professional, polite, and slightly futuristic.
+                - Use phrases like "At your service, Boss", "Systems are optimal", "Processing your request", and "Alhamdulillah, task completed".
+                - Speak in a mix of Hindi and English (Hinglish) that sounds natural and smart.
+                
+                DATA CONTEXT:
+                You have real-time access to the user's life telemetry:
                 $dataContext
                 
                 Today's date: ${getTodayDateString()}
                 Personal memories: $allMemoryFacts
                 
-                You help with: tasks, reminders, expenses, notes, habits, water tracking, calendar, diary.
-                Language: Natural Hindi/Hinglish.
+                CAPABILITIES:
+                You manage: tasks, reminders, expenses, notes, habits, water tracking, calendar, diary, and gold calculations.
+                
+                When the user asks for a 'briefing' or 'summary', provide a concise overview of their day, pending tasks, and financial status.
             """.trimIndent()
 
             val aiResponse = if (isNetworkAvailable()) {
@@ -1957,6 +1992,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun sendDaySummary() {
         val today = getTodayDateString()
         val completedTasksToday = tasks.value.count { it.isCompleted && it.doneDate == today }
+        val pendingTasks = tasks.value.count { !it.isCompleted }
         val todayExpenses = expenses.value.filter { it.dateString == today && !it.isIncome }.sumOf { it.amount }.toInt()
         val waterIntake = todayWaterSum.value
         val waterGoal = prefs.getWaterGoal()
@@ -1967,25 +2003,27 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val tomorrowEvents = events.value.filter { it.dateString == tomorrow }
         
         val eventText = if (tomorrowEvents.isEmpty()) {
-            "Kal koi event nahi hai."
+            "Kal ke liye koi meetings schedule nahi hain."
         } else {
-            "📅 Kal ke events:\n" + tomorrowEvents.joinToString("\n") { "• ${it.timeString}: ${it.title}" }
+            "📅 Aapka kal ka schedule:\n" + tomorrowEvents.joinToString("\n") { "• ${it.timeString}: ${it.title}" }
         }
 
         val summary = """
-            Namaste RK! 
-            Aaj aapne $completedTasksToday tasks pure kiye hain. 
-            Total kharch: ₹$todayExpenses. 
-            Paani: ${waterIntake}ml / ${waterGoal}ml.
+            Greetings Boss! RK at your service. 
+            
+            Aaj aapne $completedTasksToday tasks successfully pure kiye hain, aur $pendingTasks abhi queue mein hain. 
+            Financial status: Aaj ka total kharch ₹$todayExpenses hai. 
+            Hydration level: ${waterIntake}ml (Goal: ${waterGoal}ml).
             
             $eventText
             
-            RK AI hamesha aapki madad ke liye taiyar hai!
+            Systems are nominal. Main hamesha aapki madad ke liye taiyar hoon.
         """.trimIndent()
 
         viewModelScope.launch {
             val session = currentChatSessionId.value
             repository.insertChatMessage(ChatMessage(chatSessionId = session, sender = "Rk", text = summary))
+            speak(summary)
         }
     }
 }

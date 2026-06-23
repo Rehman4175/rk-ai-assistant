@@ -78,8 +78,6 @@ class MainActivity : FragmentActivity() {
                         perms.add("android.permission.POST_NOTIFICATIONS")
                     }
                     perms.add(Manifest.permission.RECORD_AUDIO)
-                    perms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
                     permissionsLauncher.launch(perms.toTypedArray())
                 }
 
@@ -197,14 +195,14 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 )
 
                 NavigationBarItem(
-                    selected = currentScreen == AppScreen.Market,
-                    onClick = { viewModel.navigateTo(AppScreen.Market) },
-                    label = { Text("Market", fontSize = 10.sp, color = if (currentScreen == AppScreen.Market) NeonCyan else SoftTextGray) },
+                    selected = currentScreen == AppScreen.GoldCalculator,
+                    onClick = { viewModel.navigateTo(AppScreen.GoldCalculator) },
+                    label = { Text("Gold", fontSize = 10.sp, color = if (currentScreen == AppScreen.GoldCalculator) NeonCyan else SoftTextGray) },
                     icon = {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-                            contentDescription = "Market & Finance",
-                            tint = if (currentScreen == AppScreen.Market) NeonCyan else SoftTextGray
+                            imageVector = Icons.Default.Calculate,
+                            contentDescription = "Gold Calculator",
+                            tint = if (currentScreen == AppScreen.GoldCalculator) NeonCyan else SoftTextGray
                         )
                     }
                 )
@@ -276,7 +274,7 @@ fun MainAppContent(viewModel: AssistantViewModel) {
                 AppScreen.RemindLinks -> RemindLinksScreen(viewModel)
                 AppScreen.PrivateSpace -> PrivateSpaceScreen(viewModel)
                 AppScreen.PrivateNoteEdit -> PrivateNoteEditScreen(viewModel)
-                AppScreen.Market -> MarketScreen(viewModel)
+                AppScreen.GoldCalculator -> GoldCalculatorScreen(viewModel)
             }
         }
     }

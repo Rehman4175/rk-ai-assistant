@@ -219,14 +219,47 @@ fun HabitCard(
                 Column {
                     Text(
                         text = habit.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
                         color = Color.White
                     )
-                    Text(
-                        text = "Category: ${habit.type} • Streak counter: 🔥 ${habit.streakCount} days",
-                        fontSize = 12.sp,
-                        color = SoftTextGray
+                    
+                    val totalLogged = habit.loggedDaysCommaSeparated.split(",").count { it.isNotBlank() }
+                    val xp = (totalLogged * 10) + (habit.streakCount * 50)
+                    val level = (xp / 500) + 1
+                    val nextLevelXp = level * 500
+                    val progress = (xp % 500) / 500f
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = NeonGreen.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, NeonGreen)
+                        ) {
+                            Text(
+                                text = "LVL $level",
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = NeonGreen
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Streak: 🔥 ${habit.streakCount} • XP: $xp",
+                            fontSize = 12.sp,
+                            color = SoftTextGray
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Level progress bar
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = NeonGreen,
+                        trackColor = Color.Black.copy(alpha = 0.3f)
                     )
                 }
 

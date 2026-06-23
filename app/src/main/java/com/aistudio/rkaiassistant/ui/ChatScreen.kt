@@ -15,6 +15,7 @@ import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.*
 import java.io.ByteArrayOutputStream
 import java.util.*
 
@@ -50,6 +52,8 @@ fun ChatScreen(viewModel: AssistantViewModel) {
     val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
     val isGenerating by viewModel.aiIsGenerating.collectAsStateWithLifecycle()
     val ttsEnabled by viewModel.textToSpeechEnabled.collectAsStateWithLifecycle()
+
+    val isSpeaking by viewModel.isSpeaking.collectAsStateWithLifecycle()
 
     val ocrText by viewModel.ocrText.collectAsStateWithLifecycle()
     val ocrLoading by viewModel.ocrLoading.collectAsStateWithLifecycle()
@@ -241,15 +245,23 @@ fun ChatScreen(viewModel: AssistantViewModel) {
                 })
             }
 
-            if (isGenerating) {
+            if (isGenerating || isSpeaking) {
                 item {
-                    Text(
-                        text = stringResource(R.string.chat_generating_response),
-                        color = NeonCyan,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(8.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isSpeaking) {
+                            JarvisWaveform()
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        Text(
+                            text = if (isSpeaking) "RK is speaking..." else stringResource(R.string.chat_generating_response),
+                            color = NeonCyan,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
@@ -445,6 +457,37 @@ fun CodeBlock(code: String, onCopy: () -> Unit) {
                 color = NeonCyan,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+}
+
+@Composable
+fun JarvisWaveform() {
+    val infiniteTransition = rememberInfiniteTransition(label = "waveform")
+    Row(
+        modifier = Modifier.height(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(5) { i ->
+            val heightScale by infiniteTransition.animateFloat(
+                initialValue = 0.2f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = 400 + (i * 100),
+                        easing = FastOutSlowInEasing
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "height_$i"
+            )
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight(heightScale)
+                    .background(NeonCyan, RoundedCornerShape(2.dp))
             )
         }
     }

@@ -161,13 +161,6 @@ class SecurePrefHelper(context: Context) {
         prefs.edit().putString("db_passphrase_v1", base64).apply()
     }
 
-    fun saveWeatherApiKey(key: String) {
-        prefs.edit().putString("WEATHER_API_KEY", key).apply()
-    }
-
-    fun getWeatherApiKey(): String {
-        return prefs.getString("WEATHER_API_KEY", "") ?: ""
-    }
 
     private fun hashString(input: String): String {
         return try {

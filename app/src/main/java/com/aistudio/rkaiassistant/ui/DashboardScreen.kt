@@ -4,6 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
 import com.aistudio.rkaiassistant.R
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -50,7 +54,6 @@ fun DashboardScreen(
     val billsList by viewModel.bills.collectAsStateWithLifecycle()
     val calendarEvents by viewModel.events.collectAsStateWithLifecycle()
     val diaryList by viewModel.diaryEntries.collectAsStateWithLifecycle()
-    val weatherTerminal by viewModel.weatherTerminal.collectAsStateWithLifecycle()
 
     val todayStr = viewModel.getTodayDateString()
     val waterSum by viewModel.todayWaterSum.collectAsStateWithLifecycle()
@@ -103,13 +106,35 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "WELCOME BACK RK",
-                                    color = NeonCyan,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 22.sp,
-                                    letterSpacing = 1.sp
-                                )
+                                val totalXp = habitsList.sumOf { 
+                                    val count = it.loggedDaysCommaSeparated.split(",").count { d -> d.isNotBlank() }
+                                    (count * 10) + (it.streakCount * 50)
+                                }
+                                val userLevel = (totalXp / 1000) + 1
+                                
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "WELCOME BACK RK",
+                                        color = NeonCyan,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 22.sp,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Surface(
+                                        color = NeonCyan.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(4.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan)
+                                    ) {
+                                        Text(
+                                            text = "LVL $userLevel",
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = NeonCyan
+                                        )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Briefing ready. Type /briefing in console.",
@@ -178,33 +203,6 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = "WEATHER TERMINAL",
-                                    fontSize = 10.sp,
-                                    color = SoftTextGray,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = weatherTerminal,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                            
-                            Icon(
-                                imageVector = Icons.Default.Cloud,
-                                contentDescription = null,
-                                tint = NeonCyan,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
                     }
                 }
             }
@@ -585,13 +583,13 @@ fun DashboardScreen(
         // Jarvis Voice Overlay
         AnimatedVisibility(
             visible = isJarvisActive,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut()
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
+                    .background(Color.Black.copy(alpha = 0.92f))
                     .clickable { viewModel.toggleJarvisMode() },
                 contentAlignment = Alignment.Center
             ) {
@@ -600,30 +598,63 @@ fun DashboardScreen(
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier.padding(32.dp)
                 ) {
-                    // Pulsing AI Ring
                     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                    val scale by infiniteTransition.animateFloat(
-                        initialValue = 1f,
-                        targetValue = 1.3f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1000, easing = LinearOutSlowInEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "scale"
-                    )
                     
-                    Box(contentAlignment = Alignment.Center) {
+                    // Complex Multi-layered Animated Ring
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(240.dp)) {
+                        // Outer rotating ring
+                        val rotation by infiniteTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 360f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(3000, easing = LinearEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "rotation"
+                        )
+                        
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            drawArc(
+                                color = NeonCyan.copy(alpha = 0.3f),
+                                startAngle = rotation,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                            )
+                            drawArc(
+                                color = NeonCyan.copy(alpha = 0.3f),
+                                startAngle = rotation + 180f,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                            )
+                        }
+
+                        // Middle pulsing ring
+                        val scale by infiniteTransition.animateFloat(
+                            initialValue = 0.8f,
+                            targetValue = 1.2f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1500, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "scale"
+                        )
+                        
                         Surface(
-                            modifier = Modifier.size(120.dp * scale),
+                            modifier = Modifier.size(160.dp * scale),
                             shape = CircleShape,
-                            color = NeonCyan.copy(alpha = 0.1f),
-                            border = androidx.compose.foundation.BorderStroke(2.dp, NeonCyan.copy(alpha = 0.5f))
+                            color = Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.2f))
                         ) {}
+
+                        // Inner core
                         Surface(
                             modifier = Modifier.size(100.dp),
                             shape = CircleShape,
                             color = NeonCyan,
-                            shadowElevation = 20.dp
+                            shadowElevation = 30.dp,
+                            tonalElevation = 10.dp
                         ) {
                             Icon(
                                 Icons.Default.Mic,
@@ -634,32 +665,35 @@ fun DashboardScreen(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(40.dp))
+                    Spacer(modifier = Modifier.height(60.dp))
                     
                     Text(
-                        text = "RK VOICE ENGINE",
+                        text = "RK VOICE CORE ACTIVE",
                         color = NeonCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
+                        letterSpacing = 4.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = jarvisStatus,
+                        text = jarvisStatus.uppercase(),
                         color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        fontFamily = FontFamily.SansSerif
                     )
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(40.dp))
                     
                     Text(
-                        text = "Tap anywhere to stop",
+                        text = "TERMINATE SESSION BY TAPPING ANYWHERE",
                         color = SoftTextGray,
-                        fontSize = 12.sp
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
                     )
                 }
             }

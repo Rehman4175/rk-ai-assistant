@@ -58,7 +58,6 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
     var budgetInput by remember { mutableStateOf(viewModel.prefs.getExpenseBudget().toString()) }
 
     var geminiKeyInput by remember { mutableStateOf(viewModel.prefs.getGeminiApiKey()) }
-    var weatherKeyInput by remember { mutableStateOf(viewModel.prefs.getWeatherApiKey()) }
 
     var scriptUrlInput by remember { mutableStateOf(viewModel.prefs.getGoogleScriptUrl()) }
     val isSyncing by viewModel.isSyncing.collectAsState()
@@ -293,7 +292,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     Text(
                         text = "API KEYS CONFIGURATION (ENCRYPTED)",
@@ -328,31 +327,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    OutlinedTextField(
-                        value = weatherKeyInput,
-                        onValueChange = { weatherKeyInput = it },
-                        label = { Text("OpenWeatherMap API Key", color = SoftTextGray) },
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        trailingIcon = {
-                            if (weatherKeyInput != viewModel.prefs.getWeatherApiKey()) {
-                                IconButton(onClick = {
-                                    viewModel.prefs.saveWeatherApiKey(weatherKeyInput)
-                                    Toast.makeText(context, "Weather Key Updated!", Toast.LENGTH_SHORT).show()
-                                }) {
-                                    Icon(Icons.Default.Upload, null, tint = NeonCyan)
-                                }
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = BorderColor,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     // Custom Notification Tune
                     Row(
@@ -442,7 +417,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         }
                     }
 
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     // Welcome Sound Toggle
                     Row(
@@ -468,7 +443,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         )
                     }
 
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     // Enable/Disable Toggle
                     Row(
@@ -534,7 +509,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     }
 
                     if (viewModel.prefs.isPinEnabled()) {
-                        Divider(color = BorderColor, thickness = 0.5.dp)
+                        HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -699,7 +674,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         )
                     }
 
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     OutlinedTextField(
                         value = scriptUrlInput,
@@ -863,7 +838,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         CommandListDialog(onDismiss = { showCommandList = false })
                     }
 
-                    Divider(color = BorderColor, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
                     Text(
                         text = "DATABASE JSON BACKUP TERMINAL",
@@ -945,7 +920,7 @@ fun CommandListItem(cmd: String, desc: String) {
     Column {
         Text(cmd, color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
         Text(desc, color = SoftTextGray, fontSize = 12.sp)
-        Divider(color = BorderColor.copy(alpha = 0.3f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
+        HorizontalDivider(color = BorderColor.copy(alpha = 0.3f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -991,7 +966,7 @@ fun SoundSelectionDialog(
                     Text("UPLOAD CUSTOM MP3/FILE", color = Color.White)
                 }
                 
-                Divider(color = BorderColor, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(color = BorderColor, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
                 
                 androidx.compose.foundation.lazy.LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(4.dp)

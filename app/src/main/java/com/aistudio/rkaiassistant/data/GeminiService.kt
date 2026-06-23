@@ -57,15 +57,6 @@ interface GeminiApi {
     ): retrofit2.Response<GeminiResponse>
 }
 
-interface WeatherApi {
-    @retrofit2.http.GET("data/2.5/weather")
-    suspend fun getWeather(
-        @Query("lat") lat: Double,
-        @Query("lon") lon: Double,
-        @Query("appid") apiKey: String,
-        @Query("units") units: String = "metric"
-    ): retrofit2.Response<okhttp3.ResponseBody>
-}
 
 // ===== SERVICE OBJECTS =====
 
@@ -95,11 +86,6 @@ object GeminiService {
 
     private val geminiApi = retrofit.create(GeminiApi::class.java)
     
-    private val weatherRetrofit = Retrofit.Builder()
-        .baseUrl("https://api.openweathermap.org/")
-        .client(okHttpClient)
-        .build()
-    private val weatherApi = weatherRetrofit.create(WeatherApi::class.java)
 
     fun isApiKeyConfigured(): Boolean {
         return geminiApiKey.isNotBlank() && geminiApiKey != "MY_GEMINI_API_KEY" && geminiApiKey != "YOUR_GEMINI_API_KEY"
@@ -246,24 +232,6 @@ object GeminiService {
         }
     }
 
-    suspend fun fetchWeather(lat: Double, lon: Double, apiKey: String): String {
-        return try {
-            val response = weatherApi.getWeather(lat, lon, apiKey)
-            if (response.isSuccessful) {
-                val body = response.body()?.string() ?: ""
-                val json = org.json.JSONObject(body)
-                val main = json.getJSONObject("main")
-                val temp = main.getDouble("temp").toInt()
-                val weatherArray = json.getJSONArray("weather")
-                val desc = if (weatherArray.length() > 0) weatherArray.getJSONObject(0).getString("description") else "Clear"
-                "$temp°C - ${desc.replaceFirstChar { it.uppercase() }}"
-            } else {
-                "Weather unavailable"
-            }
-        } catch (e: Exception) {
-            "Weather Error"
-        }
-    }
 
     suspend fun parseNaturalLanguage(
         userInput: String,

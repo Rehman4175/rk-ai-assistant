@@ -7,9 +7,7 @@
     <string name="app_logo_desc">RK App Logo</string>
     <string name="utc_clock_label">COSMIC UTC CLOCK</string>
     <string name="calendar_period_label">CALENDAR PERIOD</string>
-    <string name="weather_terminal">Weather Terminal</string>
-    <string name="weather_mock_data">24°C - Sky Clear</string>
-    <string name="weather_icon_desc">sunny weather icon</string>
+
     <string name="core_telemetry">CORE TELEMETRY</string>
     <string name="system_ok">SYSTEM OK</string>
     <string name="pending_tasks">Pending Tasks</string>
