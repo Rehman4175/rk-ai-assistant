@@ -65,18 +65,24 @@ abstract class AppDatabase : RoomDatabase() {
                     prefs.saveDbPassphrase(passphrase)
                 }
 
-                val factory = SupportOpenHelperFactory(passphrase)
-                
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "rk_assistant_database_v3"
-                )
-                .openHelperFactory(factory)
-                .fallbackToDestructiveMigration()
-                .build()
-                INSTANCE = instance
-                instance
+                try {
+                    val factory = SupportOpenHelperFactory(passphrase)
+                    
+                    val instance = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        "rk_assistant_database_v3"
+                    )
+                    .openHelperFactory(factory)
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    INSTANCE = instance
+                    instance
+                } catch (e: Exception) {
+                    android.util.Log.e("RKAI", "Failed to build database with SQLCipher!", e)
+                    // Rethrow to let the UI handle it or crash with info
+                    throw e
+                }
             }
         }
     }

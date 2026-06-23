@@ -38,8 +38,8 @@ enum class AppScreen {
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val db = AppDatabase.getDatabase(application)
-    private val repository = DatabaseRepository(db)
+    private val db: AppDatabase by lazy { AppDatabase.getDatabase(application) }
+    private val repository: DatabaseRepository by lazy { DatabaseRepository(db) }
     val prefs = SecurePrefHelper(application)
     private val cryptoManager = CryptoManager()
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
@@ -121,72 +121,76 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val privateSpaceError = MutableStateFlow<String?>(null)
     val hasPrivateSpacePassword = MutableStateFlow(prefs.hasPrivateSpacePassword())
 
-    // State Flows for DB Data
-    val tasks: StateFlow<List<Task>> = repository.allTasks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val reminders: StateFlow<List<Reminder>> = repository.allReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val habits: StateFlow<List<Habit>> = repository.allHabits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val expenses: StateFlow<List<Expense>> = repository.allExpenses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val bills: StateFlow<List<Bill>> = repository.allBills.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val events: StateFlow<List<CalendarEvent>> = repository.allEvents.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val diaryEntries: StateFlow<List<DiaryEntry>> = repository.allDiaryEntries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val notes: StateFlow<List<QuickNote>> = repository.allNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val memories: StateFlow<List<PersonalMemory>> = repository.allMemories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val smartReminders: StateFlow<List<SmartReminder>> = repository.activeSmartReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val voiceNotes: StateFlow<List<VoiceNote>> = repository.allVoiceNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val goals: StateFlow<List<Goal>> = repository.allGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val recurringReminders: StateFlow<List<RecurringReminder>> = repository.allRecurringReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val remindLinks: StateFlow<List<RemindLink>> = repository.allRemindLinks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> = repository.allPrivateSpaceItems
-        .map { items ->
-            items.map { 
-                try {
-                    it.copy(content = cryptoManager.decryptString(it.content))
-                } catch (e: Exception) {
-                    it.copy(content = "[Decryption Error]")
+    // State Flows for DB Data - Using lazy initialization for repository
+    val tasks: StateFlow<List<Task>> by lazy { repository.allTasks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val reminders: StateFlow<List<Reminder>> by lazy { repository.allReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val habits: StateFlow<List<Habit>> by lazy { repository.allHabits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val expenses: StateFlow<List<Expense>> by lazy { repository.allExpenses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val bills: StateFlow<List<Bill>> by lazy { repository.allBills.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val events: StateFlow<List<CalendarEvent>> by lazy { repository.allEvents.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val diaryEntries: StateFlow<List<DiaryEntry>> by lazy { repository.allDiaryEntries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val notes: StateFlow<List<QuickNote>> by lazy { repository.allNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val memories: StateFlow<List<PersonalMemory>> by lazy { repository.allMemories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val smartReminders: StateFlow<List<SmartReminder>> by lazy { repository.activeSmartReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val voiceNotes: StateFlow<List<VoiceNote>> by lazy { repository.allVoiceNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val goals: StateFlow<List<Goal>> by lazy { repository.allGoals.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val recurringReminders: StateFlow<List<RecurringReminder>> by lazy { repository.allRecurringReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val remindLinks: StateFlow<List<RemindLink>> by lazy { repository.allRemindLinks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val privateSpaceItems: StateFlow<List<PrivateSpaceItem>> by lazy { 
+        repository.allPrivateSpaceItems
+            .map { items ->
+                items.map { 
+                    try {
+                        it.copy(content = cryptoManager.decryptString(it.content))
+                    } catch (e: Exception) {
+                        it.copy(content = "[Decryption Error]")
+                    }
                 }
             }
-        }
-        .flowOn(Dispatchers.Default) // Decryption on background thread
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
 
-    val allActivities: StateFlow<List<ActivityItem>> = combine(
-        combine(tasks, reminders, habits, expenses, bills) { t, r, h, e, b ->
-            val list = mutableListOf<ActivityItem>()
-            val todayMonth = getTodayDateString().take(7)
-            t.forEach { list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) }
-            r.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
-            h.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
-            e.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
-            b.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
-            list
-        },
-        combine(events, diaryEntries, notes, memories, smartReminders) { ev, d, n, m, s ->
-            val list = mutableListOf<ActivityItem>()
-            ev.forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
-            d.forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
-            n.forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
-            m.forEach { list.add(ActivityItem("${it.id}#", "MEMORY", it.content.take(30), "", it.isDeleted, true, it.timestamp)) }
-            s.forEach { list.add(ActivityItem("${it.id}#", "SMART_REM", it.title, "", it.isDeleted, it.isAcknowledged, it.dueDateTime)) }
-            list
-        },
-        combine(voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems) { v, g, rr, rl, ps ->
-            val list = mutableListOf<ActivityItem>()
-            v.forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
-            g.forEach { list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp)) }
-            rr.forEach { list.add(ActivityItem("${it.id}#", "RECURRING", it.title, it.time, it.isDeleted, it.isActive, it.createdAt)) }
-            rl.forEach { 
-                val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.createdAt)?.time ?: 0L } catch (e: Exception) { 0L }
-                list.add(ActivityItem("${it.id}#", "LINK", it.text, it.dueDateTime, it.isDeleted, it.isAcknowledged, ts)) 
+    val allActivities: StateFlow<List<ActivityItem>> by lazy {
+        combine(
+            combine(tasks, reminders, habits, expenses, bills) { t, r, h, e, b ->
+                val list = mutableListOf<ActivityItem>()
+                val todayMonth = getTodayDateString().take(7)
+                t.forEach { list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) }
+                r.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
+                h.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
+                e.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
+                b.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
+                list
+            },
+            combine(events, diaryEntries, notes, memories, smartReminders) { ev, d, n, m, s ->
+                val list = mutableListOf<ActivityItem>()
+                ev.forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
+                d.forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
+                n.forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
+                m.forEach { list.add(ActivityItem("${it.id}#", "MEMORY", it.content.take(30), "", it.isDeleted, true, it.timestamp)) }
+                s.forEach { list.add(ActivityItem("${it.id}#", "SMART_REM", it.title, "", it.isDeleted, it.isAcknowledged, it.dueDateTime)) }
+                list
+            },
+            combine(voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems) { v, g, rr, rl, ps ->
+                val list = mutableListOf<ActivityItem>()
+                v.forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
+                g.forEach { list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp)) }
+                rr.forEach { list.add(ActivityItem("${it.id}#", "RECURRING", it.title, it.time, it.isDeleted, it.isActive, it.createdAt)) }
+                rl.forEach { 
+                    val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.createdAt)?.time ?: 0L } catch (e: Exception) { 0L }
+                    list.add(ActivityItem("${it.id}#", "LINK", it.text, it.dueDateTime, it.isDeleted, it.isAcknowledged, ts)) 
+                }
+                ps.forEach { 
+                    val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.modifiedAt)?.time ?: 0L } catch (e: Exception) { 0L }
+                    list.add(ActivityItem("${it.id}#", "PRIVATE", it.title, it.modifiedAt, it.isDeleted, true, ts)) 
+                }
+                list
             }
-            ps.forEach { 
-                val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.modifiedAt)?.time ?: 0L } catch (e: Exception) { 0L }
-                list.add(ActivityItem("${it.id}#", "PRIVATE", it.title, it.modifiedAt, it.isDeleted, true, ts)) 
-            }
-            list
-        }
-    ) { l1, l2, l3 ->
-        (l1 + l2 + l3).sortedByDescending { it.timestamp }
-    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        ) { l1, l2, l3 ->
+            (l1 + l2 + l3).sortedByDescending { it.timestamp }
+        }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
 
     data class ActivityItem(
         val id: String,
@@ -198,38 +202,42 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val timestamp: Long
     )
 
-    // Water tracker states
+    // Water tracker states - Lazy initialization
     private val currentDay = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-    val waterLogs: StateFlow<List<WaterLog>> = repository.getWaterLogs(currentDay).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val todayWaterSum: StateFlow<Int> = repository.getWaterSum(currentDay).map { it ?: 0 }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val waterLogs: StateFlow<List<WaterLog>> by lazy { repository.getWaterLogs(currentDay).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    val todayWaterSum: StateFlow<Int> by lazy { repository.getWaterSum(currentDay).map { it ?: 0 }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0) }
 
     fun getTodayDateString(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     fun getWaterSumForDay(day: String): Flow<Int> = repository.getWaterSum(day).map { it ?: 0 }
 
-    // Chat session state
+    // Chat session state - Lazy initialization
     val currentChatSessionId = MutableStateFlow("default")
-    val chatMessages: StateFlow<List<ChatMessage>> = currentChatSessionId.flatMapLatest { sessionId ->
-        repository.getSessionMessages(sessionId)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val chatMessages: StateFlow<List<ChatMessage>> by lazy { 
+        currentChatSessionId.flatMapLatest { sessionId ->
+            repository.getSessionMessages(sessionId)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
 
-    // Universal Search
+    // Universal Search - Lazy initialization
     val searchQuery = MutableStateFlow("")
-    val searchResults = searchQuery.debounce(300).flatMapLatest { query ->
-        if (query.isBlank()) {
-            flowOf(emptyMap<String, List<Any>>())
-        } else {
-            flow {
-                val map = mutableMapOf<String, List<Any>>()
-                map["Tasks"] = repository.searchTasks(query)
-                map["Expenses"] = repository.searchExpenses(query)
-                map["Diary"] = repository.searchDiary(query)
-                map["Notes"] = repository.searchNotes(query)
-                map["Memories"] = repository.searchMemories(query)
-                emit(map)
+    val searchResults: StateFlow<Map<String, List<Any>>> by lazy { 
+        searchQuery.debounce(300).flatMapLatest { query ->
+            if (query.isBlank()) {
+                flowOf(emptyMap<String, List<Any>>())
+            } else {
+                flow {
+                    val map = mutableMapOf<String, List<Any>>()
+                    map["Tasks"] = repository.searchTasks(query)
+                    map["Expenses"] = repository.searchExpenses(query)
+                    map["Diary"] = repository.searchDiary(query)
+                    map["Notes"] = repository.searchNotes(query)
+                    map["Memories"] = repository.searchMemories(query)
+                    emit(map)
+                }
             }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    }
 
     // AI state
     val aiIsGenerating = MutableStateFlow(false)
