@@ -8,9 +8,9 @@ lifecycleRuntimeKtx = "2.8.7"
 lifecycleViewmodelCompose = "2.8.7"
 lifecycleRuntimeCompose = "2.8.7"
 activityCompose = "1.9.3"
-kotlin = "2.2.10"
+kotlin = "2.1.0"
 composeBom = "2024.12.01"
-googleDevtoolsKsp = "2.3.9"
+googleDevtoolsKsp = "2.1.0-1.0.29"
 navigationCompose = "2.8.9"
 roomRuntime = "2.8.4"
 roomKtx = "2.8.4"
@@ -44,8 +44,8 @@ mediapipe = "0.10.35"
 sqlcipher = "4.6.1"
 sqliteKtx = "2.4.0"
 securityCrypto = "1.1.0-alpha06"
-
-
+coreKtxVersion = "1.15.0"
+kotlinReflect = "2.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -101,8 +101,8 @@ mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", 
 sqlcipher = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 androidx-sqlite-ktx = { group = "androidx.sqlite", name = "sqlite-ktx", version.ref = "sqliteKtx" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
-
-
+core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtxVersion" }
+jetbrains-kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlinReflect" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -110,3 +110,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 secrets = { id = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", version.ref = "secretsGradlePlugin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

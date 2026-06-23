@@ -33,7 +33,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class AppScreen {
-    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace, History, PrivateNoteEdit, Market
+    Dashboard, Chat, Tasks, Reminders, Habits, Water, Expenses, Bills, Calendar, Diary, Notes, Search, Settings, SmartReminders, VoiceNotes, WeeklyReview, Goals, RecurringReminders, RemindLinks, PrivateSpace, History, PrivateNoteEdit, GoldCalculator
 }
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
@@ -44,45 +44,41 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val cryptoManager = CryptoManager()
     private val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(application)
 
-    // Finance/Market State
-    val goldRate = MutableStateFlow("Loading...")
-    val silverRate = MutableStateFlow("Loading...")
-    val stockRates = MutableStateFlow<Map<String, String>>(emptyMap())
-    val newsHeadlines = MutableStateFlow<List<NewsItem>>(emptyList())
-    val isMarketLoading = MutableStateFlow(false)
+    // Gold Calculator State
+    val goldWeight = MutableStateFlow("")
+    val goldKarat = MutableStateFlow("22") // Default 22K
+    val goldPricePerGram = MutableStateFlow("")
+    val makingChargePerGram = MutableStateFlow("")
+    val goldGstRate = MutableStateFlow("3.0") // Default 3% GST
 
-    data class NewsItem(val title: String, val description: String, val url: String, val source: String)
+    // Derived Total
+    val goldTotalEstimate = combine(
+        goldWeight, goldKarat, goldPricePerGram, makingChargePerGram, goldGstRate
+    ) { weight, karat, price, making, gst ->
+        calculateGold(weight, karat, price, making, gst)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), GoldResult())
 
-    suspend fun fetchMarketData() {
-        if (isMarketLoading.value) return
-        isMarketLoading.value = true
-        
-        try {
-            // Logic: Yahoo Finance endpoints (Unofficial & Free)
-            // Gold (GC=F), Silver (SI=F), USDINR (USDINR=X)
-            // Note: In production, we'd use a robust networking library here.
-            // For now, updating UI with placeholder to show structure.
-            
-            // Placeholder logic to simulate fetching
-            delay(1000)
-            goldRate.value = "₹72,450 / 10g"
-            silverRate.value = "₹88,200 / 1kg"
-            
-            val stocks = mutableMapOf<String, String>()
-            stocks["RELIANCE.NS"] = "₹2,950.45"
-            stocks["TATAMOTORS.NS"] = "₹980.20"
-            stocks["NIFTY 50"] = "23,500.10"
-            stockRates.value = stocks
+    data class GoldResult(
+        val goldValue: Double = 0.0,
+        val totalMakingCharges: Double = 0.0,
+        val gstAmount: Double = 0.0,
+        val finalPrice: Double = 0.0
+    )
 
-            newsHeadlines.value = listOf(
-                NewsItem("Sensex hits all-time high", "Market surges as global indices rally.", "#", "TechNews"),
-                NewsItem("New AI Model Released", "RK AI Assistant gets a massive update.", "#", "WorldTech")
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("RKAI", "Market Fetch Error", e)
-        } finally {
-            isMarketLoading.value = false
-        }
+    private fun calculateGold(weightStr: String, karatStr: String, priceStr: String, makingStr: String, gstStr: String): GoldResult {
+        val w = weightStr.toDoubleOrNull() ?: 0.0
+        val k = karatStr.toDoubleOrNull() ?: 22.0
+        val p = priceStr.toDoubleOrNull() ?: 0.0
+        val m = makingStr.toDoubleOrNull() ?: 0.0
+        val g = gstStr.toDoubleOrNull() ?: 3.0
+
+        val goldVal = w * (k / 24.0) * p
+        val makingCharges = w * m
+        val subTotal = goldVal + makingCharges
+        val gstAmt = subTotal * (g / 100.0)
+        val total = subTotal + gstAmt
+
+        return GoldResult(goldVal, makingCharges, gstAmt, total)
     }
 
     // Current Screen
@@ -106,8 +102,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     val editingPrivateItem = MutableStateFlow<PrivateSpaceItem?>(null)
 
-    // Weather State
-    val weatherTerminal = MutableStateFlow("24°C - Sky Clear")
 
     // Security Lock State
     val isLocked = MutableStateFlow(prefs.isPinEnabled() && prefs.isAppLockActive())
@@ -259,48 +253,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // Backup text
     val backupDataJson = MutableStateFlow("")
 
-    private suspend fun updateWeather() {
-        // Security Fix: Get API Key from SecurePreferences instead of BuildConfig
-        val weatherKey = prefs.getWeatherApiKey()
-        
-        if (weatherKey.isBlank()) {
-            weatherTerminal.value = "Weather Key Missing"
-            return
-        }
-        
-        var lat = 19.0760 // Default Mumbai
-        var lon = 72.8777
-
-        // Attempt to get real location
-        try {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                getApplication(), android.Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                
-                val location: Location? = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-                    try {
-                        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                            .addOnSuccessListener { loc -> continuation.resume(loc) { } }
-                            .addOnFailureListener { e -> continuation.resume(null) { } }
-                    } catch (e: Exception) {
-                        continuation.resume(null) { }
-                    }
-                }
-                
-                if (location != null) {
-                    lat = location.latitude
-                    lon = location.longitude
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        
-        val result = GeminiService.fetchWeather(lat, lon, weatherKey)
-        if (result != "Weather Error" && result != "Weather unavailable") {
-            weatherTerminal.value = result
-        }
-    }
 
     private fun isNetworkAvailable(): Boolean {
         val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -376,13 +328,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // Check if API is configured
         isOnline.value = GeminiService.isApiKeyConfigured()
 
-        // --- Weather Update Job ---
-        viewModelScope.launch {
-            while (true) {
-                updateWeather()
-                kotlinx.coroutines.delay(1800000) // Every 30 minutes
-            }
-        }
 
         // --- Background Auto-Sync Job ---
         viewModelScope.launch(Dispatchers.IO) {

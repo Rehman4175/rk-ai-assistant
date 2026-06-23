@@ -20,10 +20,9 @@ class SecurePrefHelper(context: Context) {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
-    } catch (e: Exception) {
-        android.util.Log.e("RKAI", "CRITICAL: Secure Preferences initialization failed!", e)
+    } catch (t: Throwable) {
+        android.util.Log.e("RKAI", "CRITICAL: Secure Preferences initialization failed! Falling back.", t)
         // Fallback to regular SharedPreferences if encryption is unavailable or broken on this device
-        // In a real production app, you might want to handle this more strictly.
         context.getSharedPreferences("rk_assistant_fallback_prefs", Context.MODE_PRIVATE)
     }
 

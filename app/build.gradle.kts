@@ -4,6 +4,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
+  alias(libs.plugins.kotlin.android)
 }
 
 android {
@@ -66,6 +67,9 @@ android {
       isIncludeAndroidResources = true
     }
   }
+  kotlinOptions {
+    jvmTarget = "11"
+  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
@@ -117,6 +121,7 @@ dependencies {
   // Coroutines
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.jetbrains.kotlin.reflect)
 
   // DataStore
   implementation(libs.androidx.datastore.preferences)
