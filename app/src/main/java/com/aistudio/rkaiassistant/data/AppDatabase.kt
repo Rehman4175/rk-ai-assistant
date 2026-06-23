@@ -79,9 +79,30 @@ abstract class AppDatabase : RoomDatabase() {
                     INSTANCE = instance
                     instance
                 } catch (e: Exception) {
-                    android.util.Log.e("RKAI", "Failed to build database with SQLCipher!", e)
-                    // Rethrow to let the UI handle it or crash with info
-                    throw e
+                    android.util.Log.e("RKAI", "SQLCipher failed, falling back to unencrypted database!", e)
+                    // Fallback to unencrypted database so the app at least opens and works
+                    val fallbackInstance = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        "rk_assistant_database_unencrypted"
+                    )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    INSTANCE = fallbackInstance
+                    fallbackInstance
+                } catch (e: Throwable) {
+                    // Catch LinkageErrors etc.
+                    android.util.Log.e("RKAI", "Critical failure in database init!", e)
+                    // We try one last time with no encryption if it's a native loading issue
+                    val finalFallback = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        "rk_assistant_database_unencrypted_final"
+                    )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    INSTANCE = finalFallback
+                    finalFallback
                 }
             }
         }
