@@ -150,43 +150,42 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allActivities: StateFlow<List<ActivityItem>> = combine(
-        listOf(
-            tasks, reminders, habits, expenses, bills, events, diaryEntries, notes, 
-            memories, smartReminders, voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems
-        )
-    ) { flowResults ->
-        val list = mutableListOf<ActivityItem>()
-        val todayMonth = getTodayDateString().take(7)
-        
-        (flowResults[0] as? List<Task>)?.forEach { 
-            list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) 
+        combine(tasks, reminders, habits, expenses, bills) { t, r, h, e, b ->
+            val list = mutableListOf<ActivityItem>()
+            val todayMonth = getTodayDateString().take(7)
+            t.forEach { list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) }
+            r.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
+            h.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
+            e.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
+            b.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
+            list
+        },
+        combine(events, diaryEntries, notes, memories, smartReminders) { ev, d, n, m, s ->
+            val list = mutableListOf<ActivityItem>()
+            ev.forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
+            d.forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
+            n.forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
+            m.forEach { list.add(ActivityItem("${it.id}#", "MEMORY", it.content.take(30), "", it.isDeleted, true, it.timestamp)) }
+            s.forEach { list.add(ActivityItem("${it.id}#", "SMART_REM", it.title, "", it.isDeleted, it.isAcknowledged, it.dueDateTime)) }
+            list
+        },
+        combine(voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems) { v, g, rr, rl, ps ->
+            val list = mutableListOf<ActivityItem>()
+            v.forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
+            g.forEach { list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp)) }
+            rr.forEach { list.add(ActivityItem("${it.id}#", "RECURRING", it.title, it.time, it.isDeleted, it.isActive, it.createdAt)) }
+            rl.forEach { 
+                val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.createdAt)?.time ?: 0L } catch (e: Exception) { 0L }
+                list.add(ActivityItem("${it.id}#", "LINK", it.text, it.dueDateTime, it.isDeleted, it.isAcknowledged, ts)) 
+            }
+            ps.forEach { 
+                val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.modifiedAt)?.time ?: 0L } catch (e: Exception) { 0L }
+                list.add(ActivityItem("${it.id}#", "PRIVATE", it.title, it.modifiedAt, it.isDeleted, true, ts)) 
+            }
+            list
         }
-        (flowResults[1] as? List<Reminder>)?.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
-        (flowResults[2] as? List<Habit>)?.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
-        (flowResults[3] as? List<Expense>)?.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
-        (flowResults[4] as? List<Bill>)?.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
-        (flowResults[5] as? List<CalendarEvent>)?.forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
-        (flowResults[6] as? List<DiaryEntry>)?.forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
-        (flowResults[7] as? List<QuickNote>)?.forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
-        (flowResults[8] as? List<PersonalMemory>)?.forEach { list.add(ActivityItem("${it.id}#", "MEMORY", it.content.take(30), "", it.isDeleted, true, it.timestamp)) }
-        (flowResults[9] as? List<SmartReminder>)?.forEach { list.add(ActivityItem("${it.id}#", "SMART_REM", it.title, "", it.isDeleted, it.isAcknowledged, it.dueDateTime)) }
-        (flowResults[10] as? List<VoiceNote>)?.forEach { list.add(ActivityItem("${it.id}#", "VOICE", it.transcription.take(30), "", it.isDeleted, it.isTranscribed, it.timestamp)) }
-        (flowResults[11] as? List<Goal>)?.forEach { 
-            list.add(ActivityItem("${it.id}#", "GOAL", it.title, it.createdAt, it.isDeleted, it.isDone, it.timestamp))
-        }
-        (flowResults[12] as? List<RecurringReminder>)?.forEach {
-            list.add(ActivityItem("${it.id}#", "RECURRING", it.title, it.time, it.isDeleted, it.isActive, it.createdAt))
-        }
-        (flowResults[13] as? List<RemindLink>)?.forEach {
-            val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.createdAt)?.time ?: 0L } catch (e: Exception) { 0L }
-            list.add(ActivityItem("${it.id}#", "LINK", it.text, it.dueDateTime, it.isDeleted, it.isAcknowledged, ts))
-        }
-        (flowResults[14] as? List<PrivateSpaceItem>)?.forEach {
-            val ts = try { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(it.modifiedAt)?.time ?: 0L } catch (e: Exception) { 0L }
-            list.add(ActivityItem("${it.id}#", "PRIVATE", it.title, it.modifiedAt, it.isDeleted, true, ts))
-        }
-        
-        list.sortedByDescending { it.timestamp }
+    ) { l1, l2, l3 ->
+        (l1 + l2 + l3).sortedByDescending { it.timestamp }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     data class ActivityItem(
