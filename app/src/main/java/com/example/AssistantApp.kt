@@ -6,9 +6,11 @@ class AssistantApp : Application() {
     companion object {
         init {
             try {
+                // Ensure SQLCipher native libraries are loaded correctly
                 System.loadLibrary("sqlcipher")
-            } catch (e: Exception) {
-                // Ignore if it fails here, will try again in DB init
+            } catch (e: Throwable) {
+                // Ignore errors here; it might be already loaded or not needed yet
+                android.util.Log.w("RKAI", "SQLCipher native load attempt: ${e.message}")
             }
         }
     }

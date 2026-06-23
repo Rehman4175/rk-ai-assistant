@@ -4,12 +4,11 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.kotlin.android)
 }
 
 android {
   namespace = "com.aistudio.rkaiassistant"
-  compileSdk = 36  // Reverted to 36 to avoid migration warnings for now
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.aistudio.rkaiassistant.fptwyz"
@@ -66,9 +65,6 @@ android {
     unitTests {
       isIncludeAndroidResources = true
     }
-  }
-  kotlinOptions {
-    jvmTarget = "11"
   }
 }
 

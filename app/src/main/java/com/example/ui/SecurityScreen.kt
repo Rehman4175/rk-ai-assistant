@@ -25,21 +25,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.SlateDarkBackground
 import com.example.ui.theme.SoftTextGray
 import com.example.viewmodel.AssistantViewModel
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+// ...
 @Composable
 fun SecurityScreen(viewModel: AssistantViewModel) {
     var enteredPin by remember { mutableStateOf("") }
     val isPinSetup = !viewModel.prefs.isPinEnabled()
-    val pinError by viewModel.pinError.collectAsState()
+    val pinError by viewModel.pinError.collectAsStateWithLifecycle()
     
     val context = LocalContext.current
     val biometricHelper = remember { BiometricHelper(context) }
     val isBiometricAvailable = remember { biometricHelper.isBiometricAvailable() }
-    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsState()
+    val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
 
     // Auto-trigger biometric if available and not in setup
     LaunchedEffect(Unit) {
