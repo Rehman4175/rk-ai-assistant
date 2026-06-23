@@ -243,60 +243,72 @@ class GoogleSheetSyncWorker(val context: Context, workerParams: WorkerParameters
 class ReminderWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result {
         val db = AppDatabase.getDatabase(context)
-        val activeReminders = db.reminderDao().getAllRemindersList() // Check all reminders
         val now = System.currentTimeMillis()
 
+        // 1. Handle regular Reminders
+        val activeReminders = db.reminderDao().getAllRemindersList()
         activeReminders.forEach { reminder ->
             if (!reminder.isAcknowledged && !reminder.isDeleted && now >= reminder.dueDateTime) {
-                // Send rich notification
-                val completeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
-                    action = "com.aistudio.rkaiassistant.COMPLETE_REMINDER"
-                    putExtra("REMINDER_ID", reminder.id)
-                }
-                val pendingComplete = PendingIntent.getBroadcast(
-                    context,
-                    reminder.id,
-                    completeIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val completeAction = NotificationCompat.Action.Builder(
-                    android.R.drawable.ic_menu_save,
-                    "Acknowledge",
-                    pendingComplete
-                ).build()
-
-                val snoozeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
-                    action = "com.aistudio.rkaiassistant.SNOOZE_REMINDER"
-                    putExtra("REMINDER_ID", reminder.id)
-                }
-                val pendingSnooze = PendingIntent.getBroadcast(
-                    context,
-                    reminder.id + 10000, // Unique ID
-                    snoozeIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val snoozeAction = NotificationCompat.Action.Builder(
-                    android.R.drawable.ic_lock_idle_alarm,
-                    "Snooze 10m",
-                    pendingSnooze
-                ).build()
-
-                sendAndroidNotification(
-                    context = context,
-                    id = reminder.id,
-                    channelId = "reminders_channel",
-                    channelName = "Reminders",
-                    title = "🔔 Reminder: " + reminder.title,
-                    text = "It's time for: ${reminder.title}",
-                    actions = listOf(completeAction, snoozeAction)
-                )
-
-                // Mark as acknowledged so it doesn't fire again immediately
+                sendReminderNotification(context, reminder.id, reminder.title, "Reminder")
                 db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
             }
         }
 
+        // 2. Handle SmartReminders
+        val smartReminders = db.smartReminderDao().getActiveList()
+        smartReminders.forEach { srem ->
+            if (now >= srem.dueDateTime) {
+                sendReminderNotification(context, srem.id + 50000, srem.title, "Smart Reminder")
+                
+                if (srem.currentRepeat < srem.maxRepeats) {
+                    val nextTime = now + (srem.repeatIntervalMinutes * 60 * 1000L)
+                    db.smartReminderDao().updateSmartReminder(srem.copy(
+                        dueDateTime = nextTime,
+                        currentRepeat = srem.currentRepeat + 1
+                    ))
+                } else {
+                    db.smartReminderDao().updateSmartReminder(srem.copy(isAcknowledged = true))
+                }
+            }
+        }
+
         return Result.success()
+    }
+
+    private fun sendReminderNotification(context: Context, id: Int, title: String, type: String) {
+        val completeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
+            action = "com.aistudio.rkaiassistant.COMPLETE_REMINDER"
+            putExtra("REMINDER_ID", id)
+            putExtra("TYPE", type)
+        }
+        val pendingComplete = PendingIntent.getBroadcast(
+            context, id, completeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val completeAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_save, "Acknowledge", pendingComplete
+        ).build()
+
+        val snoozeIntent = Intent(context, SmartReminderReceiver::class.java).apply {
+            action = "com.aistudio.rkaiassistant.SNOOZE_REMINDER"
+            putExtra("REMINDER_ID", id)
+            putExtra("TYPE", type)
+        }
+        val pendingSnooze = PendingIntent.getBroadcast(
+            context, id + 10000, snoozeIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val snoozeAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_lock_idle_alarm, "Snooze 10m", pendingSnooze
+        ).build()
+
+        sendAndroidNotification(
+            context = context,
+            id = id,
+            channelId = "reminders_channel",
+            channelName = "Reminders",
+            title = "🔔 $type: $title",
+            text = "It's time for: $title",
+            actions = listOf(completeAction, snoozeAction)
+        )
     }
 }
 
@@ -470,31 +482,38 @@ class SmartReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pendingResult = goAsync()
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val reminderId = intent.getIntExtra("REMINDER_ID", -1)
+        val id = intent.getIntExtra("REMINDER_ID", -1)
+        val type = intent.getStringExtra("TYPE") ?: "Reminder"
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (intent.action == "com.aistudio.rkaiassistant.COMPLETE_REMINDER") {
-                    if (reminderId != -1) {
-                        notificationManager.cancel(reminderId)
+                    if (id != -1) {
+                        notificationManager.cancel(id)
                         val db = AppDatabase.getDatabase(context)
-                        val reminder = db.reminderDao().getReminderById(reminderId)
-                        if (reminder != null) {
-                            db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
+                        if (type == "Smart Reminder") {
+                            val srem = db.smartReminderDao().getById(id - 50000)
+                            if (srem != null) db.smartReminderDao().updateSmartReminder(srem.copy(isAcknowledged = true))
+                        } else {
+                            val reminder = db.reminderDao().getReminderById(id)
+                            if (reminder != null) db.reminderDao().updateReminder(reminder.copy(isAcknowledged = true))
                         }
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "Reminder completed.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Completed.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else if (intent.action == "com.aistudio.rkaiassistant.SNOOZE_REMINDER") {
-                    if (reminderId != -1) {
-                        notificationManager.cancel(reminderId)
+                    if (id != -1) {
+                        notificationManager.cancel(id)
                         val db = AppDatabase.getDatabase(context)
-                        val reminder = db.reminderDao().getReminderById(reminderId)
-                        if (reminder != null) {
-                            // Reschedule by 10 minutes and reset acknowledged flag
-                            val newTime = System.currentTimeMillis() + (10 * 60 * 1000L)
-                            db.reminderDao().updateReminder(reminder.copy(dueDateTime = newTime, isAcknowledged = false))
+                        val newTime = System.currentTimeMillis() + (10 * 60 * 1000L)
+                        
+                        if (type == "Smart Reminder") {
+                            val srem = db.smartReminderDao().getById(id - 50000)
+                            if (srem != null) db.smartReminderDao().updateSmartReminder(srem.copy(dueDateTime = newTime, isAcknowledged = false))
+                        } else {
+                            val reminder = db.reminderDao().getReminderById(id)
+                            if (reminder != null) db.reminderDao().updateReminder(reminder.copy(dueDateTime = newTime, isAcknowledged = false))
                         }
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, "Snoozed for 10 minutes.", Toast.LENGTH_SHORT).show()

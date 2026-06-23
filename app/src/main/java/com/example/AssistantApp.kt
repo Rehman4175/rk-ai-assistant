@@ -1,25 +1,24 @@
 package com.example
 
 import android.app.Application
+import com.example.data.SecurePrefHelper
+import com.example.data.GeminiService
+import android.util.Log
 
 class AssistantApp : Application() {
-    companion object {
-        init {
-            try {
-                // Ensure SQLCipher native libraries are loaded correctly
-                System.loadLibrary("sqlcipher")
-            } catch (e: Throwable) {
-                // Ignore errors here; it might be already loaded or not needed yet
-                android.util.Log.w("RKAI", "SQLCipher native load attempt: ${e.message}")
-            }
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
         
+        try {
+            // Load SQLCipher native libraries
+            System.loadLibrary("sqlcipher")
+        } catch (e: Throwable) {
+            Log.e("RKAI", "SQLCipher native load failed: ${e.message}")
+        }
+        
         // Initialize Gemini Service
-        val prefs = com.example.data.SecurePrefHelper(this)
-        com.example.data.GeminiService.initialize(prefs.getGeminiApiKey())
+        val prefs = SecurePrefHelper(this)
+        GeminiService.initialize(prefs.getGeminiApiKey())
     }
 }

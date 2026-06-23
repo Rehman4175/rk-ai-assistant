@@ -150,18 +150,21 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allActivities: StateFlow<List<ActivityItem>> = combine(
-        tasks, reminders, habits, expenses, bills, events, diaryEntries, notes, memories, smartReminders, voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems
+        listOf(
+            tasks, reminders, habits, expenses, bills, events, diaryEntries, notes, 
+            memories, smartReminders, voiceNotes, goals, recurringReminders, remindLinks, privateSpaceItems
+        )
     ) { flowResults ->
         val list = mutableListOf<ActivityItem>()
+        val todayMonth = getTodayDateString().take(7)
         
-        // Use safe casting and index-based access
         (flowResults[0] as? List<Task>)?.forEach { 
             list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) 
         }
         (flowResults[1] as? List<Reminder>)?.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
         (flowResults[2] as? List<Habit>)?.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
         (flowResults[3] as? List<Expense>)?.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
-        (flowResults[4] as? List<Bill>)?.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(getTodayDateString().take(7)), it.createdAt)) }
+        (flowResults[4] as? List<Bill>)?.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
         (flowResults[5] as? List<CalendarEvent>)?.forEach { list.add(ActivityItem("${it.id}#", "EVENT", it.title, it.dateString, it.isDeleted, true, it.createdAt)) }
         (flowResults[6] as? List<DiaryEntry>)?.forEach { list.add(ActivityItem("${it.id}#", "DIARY", it.text.take(30), it.dateString, it.isDeleted, true, it.timestamp)) }
         (flowResults[7] as? List<QuickNote>)?.forEach { list.add(ActivityItem("${it.id}#", "NOTE", it.title, "", it.isDeleted, true, it.timestamp)) }
@@ -474,6 +477,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             override fun onError(error: Int) {
                 if (!isJarvisActive.value) return // Don't restart if turned off
+
+                speechRecognizer?.destroy()
+                speechRecognizer = null
 
                 if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH || error == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
                     jarvisStatus.value = "Say something..."
