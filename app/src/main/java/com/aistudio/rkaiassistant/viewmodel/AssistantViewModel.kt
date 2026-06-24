@@ -17,6 +17,8 @@ import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
 import android.widget.Toast
 import com.aistudio.rkaiassistant.data.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -233,6 +235,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val textToSpeechEnabled = MutableStateFlow(true)
     val isSpeaking = MutableStateFlow(false)
     val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
+    
+    // Cloud Login & Backup State
+    val isLoggedIn = MutableStateFlow(FirebaseAuth.getInstance().currentUser != null)
+    val isLoginSkipped = MutableStateFlow(prefs.isLoginSkipped())
+    val cloudUser: FirebaseUser? get() = FirebaseAuth.getInstance().currentUser
+
     val isLocalAiAvailable = MutableStateFlow(false)
     val isImportingModel = MutableStateFlow(false)
     val modelDownloadProgress = MutableStateFlow<Float?>(null)
@@ -291,6 +299,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // Use Google TTS engine specifically for best Hindi/Indian English support
         tts = TextToSpeech(application, { status ->
             if (status == TextToSpeech.SUCCESS) {
+                // Try to set Hindi first
                 val locale = Locale("hi", "IN")
                 val result = tts?.setLanguage(locale)
                 
@@ -303,24 +312,24 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 try {
                     val voices = tts?.voices
                     if (!voices.isNullOrEmpty()) {
-                        val bestVoice = voices.find { v -> 
-                            v.locale.language == "hi" && v.name.lowercase().contains("network")
-                        } ?: voices.find { v -> 
-                            v.locale.language == "hi" && v.name.lowercase().contains("enhanced")
-                        } ?: voices.find { v -> 
-                            v.locale.language == "hi"
-                        } ?: voices.find { v ->
-                            v.locale.language == "en" && v.locale.country == "IN"
-                        }
+                        // Priority: 1. Hindi Network/Neural, 2. Hindi Local High Quality, 3. Hindi Any, 4. English India
+                        val bestVoice = voices.filter { it.locale.language == "hi" }
+                            .sortedWith(compareByDescending<android.speech.tts.Voice> { 
+                                it.name.lowercase().contains("network") || it.name.lowercase().contains("neural") 
+                            }.thenByDescending { 
+                                it.quality >= android.speech.tts.Voice.QUALITY_HIGH
+                            }.thenByDescending {
+                                !it.isNetworkConnectionRequired // Prefer offline if high quality is same
+                            }).firstOrNull() ?: voices.find { it.locale.language == "en" && it.locale.country == "IN" }
                         
                         bestVoice?.let { tts?.voice = it }
                     }
                 } catch (e: Exception) {}
 
                 tts?.setPitch(1.0f)
-                tts?.setSpeechRate(0.95f) // Slightly slower for better clarity
+                tts?.setSpeechRate(0.92f) // Slightly slower for better Hinglish clarity
             }
-        }, null) // Stability Fix: Default engine (null) instead of hardcoded package
+        }, "com.google.android.tts")
         // Check if API is configured
         isOnline.value = GeminiService.isApiKeyConfigured()
 
@@ -365,17 +374,24 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             isSpeaking.value = true
             // Enhanced phonetic processing for smoother Hindi/Hinglish delivery
             val processedText = text
+                .replace("?", "? ")
+                .replace(".", ". ")
+                .replace(",", ", ")
                 .replace("Assalamualaikum", "Assalam-o-alaikum")
                 .replace("Alhamdulillah", "Al-ham-du-lillah")
                 .replace("InshAllah", "In-sha-Allah")
                 .replace("MashAllah", "Ma-sha-Allah")
                 .replace("SubhanAllah", "Sub-han-Allah")
-                .replace("RK", "R.K.")
-                .replace("sir", "sir,") // adds a natural pause
+                .replace("RK", "R. K.")
+                .replace("sir", "sir,") 
                 .replace("theek", "theek")
                 .replace("kaise ho", "kaise ho?")
                 .replace("kya ", "kya, ")
                 .replace("hoon", "hoon.")
+                .replace("samajh", "samajh")
+                .replace("kar raha", "kar raha")
+                .replace("thoda", "thoda")
+                .replace("acha", "achha")
             
             val listener = object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
@@ -465,8 +481,32 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private fun stopJarvisListening() {
         isJarvisActive.value = false
         jarvisStatus.value = "Jarvis Standby"
-        speechRecognizer?.cancel() // Immediate cancel instead of just stop
+        speechRecognizer?.cancel()
         tts?.stop()
+    }
+
+    fun openTtsSettings() {
+        try {
+            val intent = Intent()
+            intent.action = "com.android.settings.TTS_SETTINGS"
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            getApplication<Application>().startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                getApplication<Application>().startActivity(intent)
+            } catch (e2: Exception) {}
+        }
+    }
+
+    fun downloadTtsData() {
+        try {
+            val installIntent = Intent()
+            installIntent.action = TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA
+            installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(installIntent)
+        } catch (e: Exception) {}
     }
 
     private fun handleJarvisVoiceCommand(text: String) {
@@ -533,6 +573,47 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleWelcomeSound(enabled: Boolean) {
         prefs.setWelcomeSoundEnabled(enabled)
         isWelcomeSoundEnabled.value = enabled
+    }
+
+    fun skipLogin() {
+        prefs.setLoginSkipped(true)
+        isLoginSkipped.value = true
+    }
+
+    fun loginSuccess() {
+        isLoggedIn.value = true
+        prefs.setLoginSkipped(false)
+        isLoginSkipped.value = false
+        restoreFromCloud()
+    }
+
+    fun logout() {
+        FirebaseAuth.getInstance().signOut()
+        isLoggedIn.value = false
+        prefs.setLoginSkipped(false)
+        isLoginSkipped.value = false
+    }
+
+    private fun restoreFromCloud() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Restore Tasks
+                val cloudTasks = FirebaseSyncHelper.downloadFromCloud("tasks")
+                cloudTasks.forEach { map ->
+                    repository.insertTask(Task(
+                        title = map["title"] as? String ?: "",
+                        isCompleted = map["isCompleted"] as? Boolean ?: false,
+                        priority = map["priority"] as? String ?: "Medium",
+                        timestamp = map["timestamp"] as? Long ?: System.currentTimeMillis()
+                    ))
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "Data restored from cloud!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RKAI", "Cloud Restore Error", e)
+            }
+        }
     }
 
     fun unlockWithBiometric() {

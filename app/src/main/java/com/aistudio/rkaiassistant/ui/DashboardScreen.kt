@@ -713,12 +713,12 @@ fun MetricCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(160.dp)
+            .clip(RoundedCornerShape(28.dp))
             .background(CardBackgroundGlass)
-            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+            .border(1.dp, BorderColor.copy(alpha = 0.5f), RoundedCornerShape(28.dp))
             .clickable { onClick() }
-            .padding(16.dp)
+            .padding(20.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -726,36 +726,51 @@ fun MetricCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = title.uppercase(),
-                    color = SoftTextGray,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Surface(
+                    color = color.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = color,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
                 Icon(
-                    imageVector = icon,
+                    imageVector = Icons.Default.ArrowForward,
                     contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(20.dp)
+                    tint = SoftTextGray.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
                 )
             }
-
+            
             Column {
                 Text(
                     text = value,
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = title.uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subText,
+                    fontSize = 11.sp,
                     color = SoftTextGray,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
+                    maxLines = 1
                 )
             }
         }

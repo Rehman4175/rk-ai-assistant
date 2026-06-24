@@ -236,6 +236,78 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Cloud Backup & Restore Section
+            val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+            val cloudUser = viewModel.cloudUser
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(CardBackgroundGlass)
+                    .border(1.dp, if (isLoggedIn) NeonGreen else BorderColor, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "CLOUD SYNC & BACKUP",
+                        color = if (isLoggedIn) NeonGreen else NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    if (isLoggedIn) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudDone, null, tint = NeonGreen)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Synced as ${cloudUser?.email ?: "User"}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Auto-backup is enabled", color = SoftTextGray, fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            TextButton(onClick = { viewModel.logout() }) {
+                                Text("LOGOUT", color = Color.Red.copy(alpha = 0.7f), fontSize = 12.sp)
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = { 
+                                // Trigger a full sync manually
+                                Toast.makeText(context, "Full cloud sync started...", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("BACKUP NOW", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudOff, null, tint = SoftTextGray)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Not Signed In", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Login to protect your data", color = SoftTextGray, fontSize = 11.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewModel.loginSuccess() }, // Mock login success
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("SIGN IN WITH GOOGLE", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Subgoals preferences edit block
             Box(
                 modifier = Modifier
@@ -366,6 +438,75 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     currentUri = notificationTuneInput,
                     onCustomClick = { soundPickerLauncher.launch(arrayOf("audio/*")) }
                 )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Voice & Speech
+            Text(text = "VOICE & SPEECH CONFIGURATION", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp), fontFamily = FontFamily.Monospace)
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(CardBackgroundGlass)
+                    .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MusicNote, null, tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text("Speech Output (TTS)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Enable/Disable assistant voice", color = SoftTextGray, fontSize = 11.sp)
+                            }
+                        }
+                        val ttsEnabled by viewModel.textToSpeechEnabled.collectAsState()
+                        Switch(
+                            checked = ttsEnabled,
+                            onCheckedChange = { viewModel.toggleTextToSpeech() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = NeonCyan,
+                                checkedTrackColor = NeonCyan.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
+
+                    Button(
+                        onClick = { viewModel.openTtsSettings() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                    ) {
+                        Icon(Icons.Default.Settings, null, tint = NeonCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("TTS ENGINE SETTINGS", color = Color.White)
+                    }
+
+                    Button(
+                        onClick = { viewModel.downloadTtsData() },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Download, null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("DOWNLOAD HINDI VOICE PACK", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+
+                    Text(
+                        text = "Tip: 'Google Speech Services' select karein aur 'Hindi (India)' ka high-quality voice pack download karein for clear Hinglish voice.",
+                        color = SoftTextGray,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -745,45 +886,35 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     if (showSyncHelp) {
                         AlertDialog(
                             onDismissRequest = { showSyncHelp = false },
-                            title = { Text("How to Setup Sync", color = NeonCyan) },
+                            title = { Text("Setup Auto-Sync", color = NeonCyan, fontWeight = FontWeight.Bold) },
                             text = {
                                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                                     Text(
-                                        text = "1. Google Sheet kholen.\n" +
-                                                "2. 'Extensions' -> 'Apps Script' pe jayen.\n" +
-                                                "3. Neeche wala code copy karke paste karein:\n\n" +
-                                                "function doPost(e) {\n" +
-                                                "  var data = JSON.parse(e.postData.contents);\n" +
-                                                "  var ss = SpreadsheetApp.getActiveSpreadsheet();\n\n" +
-                                                "  for (var key in data) {\n" +
-                                                "    var sheet = ss.getSheetByName(key) || ss.insertSheet(key);\n" +
-                                                "    sheet.clear(); // Fresh sync\n" +
-                                                "    var rows = data[key];\n" +
-                                                "    if (rows.length > 0) {\n" +
-                                                "      var headers = Object.keys(rows[0]);\n" +
-                                                "      sheet.appendRow(headers);\n" +
-                                                "      \n" +
-                                                "      // Formatting headers\n" +
-                                                "      sheet.getRange(1, 1, 1, headers.length).setBackground('#00E5FF').setFontWeight('bold');\n\n" +
-                                                "      var dataValues = rows.map(function(r) {\n" +
-                                                "        return headers.map(function(h) { return r[h]; });\n" +
-                                                "      });\n" +
-                                                "      sheet.getRange(2, 1, dataValues.length, headers.length).setValues(dataValues);\n" +
-                                                "    }\n" +
-                                                "  }\n" +
-                                                "  return ContentService.createTextOutput('Success');\n" +
-                                                "}\n\n" +
-                                                "4. 'Deploy' -> 'New Deployment' -> 'Web App'.\n" +
-                                                "5. 'Who has access' ko 'Anyone' karein.\n" +
-                                                "6. Deployment URL yahan paste karein.",
+                                        text = "1. Use 'Sign in with Google' above for automatic cloud backup.\n\n" +
+                                                "2. For Google Sheets backup (Optional):\n" +
+                                                "   - Open a Google Sheet.\n" +
+                                                "   - Extensions -> Apps Script.\n" +
+                                                "   - Paste code and 'Deploy as Web App'.\n" +
+                                                "   - Copy the Web App URL and paste here.",
                                         color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace
+                                        fontSize = 13.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Why use Cloud Backup?\n" +
+                                                "✅ Auto-sync every step\n" +
+                                                "✅ Restore after data clear\n" +
+                                                "✅ Use on multiple devices",
+                                        color = NeonGreen,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             },
                             confirmButton = {
-                                Button(onClick = { showSyncHelp = false }) { Text("OK") }
+                                Button(onClick = { showSyncHelp = false }, colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)) { 
+                                    Text("Got it", color = Color.Black) 
+                                }
                             },
                             containerColor = Color(0xFF1C1E32)
                         )

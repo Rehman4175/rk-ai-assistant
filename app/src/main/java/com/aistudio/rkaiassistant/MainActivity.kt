@@ -56,6 +56,8 @@ class MainActivity : FragmentActivity() {
         setContent {
             MyApplicationTheme {
                 val isLocked by viewModel.isLocked.collectAsState()
+                val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+                val isLoginSkipped by viewModel.isLoginSkipped.collectAsState()
 
                 // Request Notification and Location Permissions
                 val context = LocalContext.current
@@ -99,6 +101,15 @@ class MainActivity : FragmentActivity() {
 
                 if (isLocked) {
                     SecurityScreen(viewModel)
+                } else if (!isLoggedIn && !isLoginSkipped) {
+                    LoginScreen(
+                        onLoginClick = { 
+                            // In a real app, this triggers Google Sign In
+                            // For now, we simulate success for demonstration if they click it
+                            viewModel.loginSuccess()
+                        },
+                        onSkip = { viewModel.skipLogin() }
+                    )
                 } else {
                     MainAppContent(viewModel)
                 }

@@ -138,6 +138,14 @@ class SecurePrefHelper(context: Context) {
         prefs.edit().putBoolean("settings_welcome_sound", enabled).apply()
     }
 
+    fun isLoginSkipped(): Boolean {
+        return prefs.getBoolean("settings_login_skipped", false)
+    }
+
+    fun setLoginSkipped(skipped: Boolean) {
+        prefs.edit().putBoolean("settings_login_skipped", skipped).apply()
+    }
+
     fun saveGeminiApiKey(key: String) {
         prefs.edit().putString("GEMINI_API_KEY", key).apply()
     }

@@ -6,24 +6,52 @@ class DatabaseRepository(private val db: AppDatabase) {
 
     // Tasks
     val allTasks: Flow<List<Task>> = db.taskDao().getAllTasks()
-    suspend fun insertTask(task: Task) = db.taskDao().insertTask(task)
-    suspend fun updateTask(task: Task) = db.taskDao().updateTask(task)
-    suspend fun deleteTask(task: Task) = db.taskDao().deleteTask(task)
+    suspend fun insertTask(task: Task) {
+        db.taskDao().insertTask(task)
+        FirebaseSyncHelper.uploadToCloud("tasks", task, task.timestamp.toString())
+    }
+    suspend fun updateTask(task: Task) {
+        db.taskDao().updateTask(task)
+        FirebaseSyncHelper.uploadToCloud("tasks", task, task.timestamp.toString())
+    }
+    suspend fun deleteTask(task: Task) {
+        db.taskDao().deleteTask(task)
+        FirebaseSyncHelper.deleteFromCloud("tasks", task.timestamp.toString())
+    }
     suspend fun searchTasks(query: String): List<Task> = db.taskDao().searchTasks(query)
 
     // Reminders
     val activeReminders: Flow<List<Reminder>> = db.reminderDao().getActiveReminders()
     val allReminders: Flow<List<Reminder>> = db.reminderDao().getAllReminders()
     val fullReminderHistory: Flow<List<Reminder>> = db.reminderDao().getFullHistory()
-    suspend fun insertReminder(reminder: Reminder): Long = db.reminderDao().insertReminder(reminder)
-    suspend fun updateReminder(reminder: Reminder) = db.reminderDao().updateReminder(reminder)
-    suspend fun deleteReminder(reminder: Reminder) = db.reminderDao().deleteReminder(reminder)
+    suspend fun insertReminder(reminder: Reminder): Long {
+        val id = db.reminderDao().insertReminder(reminder)
+        FirebaseSyncHelper.uploadToCloud("reminders", reminder, id.toString())
+        return id
+    }
+    suspend fun updateReminder(reminder: Reminder) {
+        db.reminderDao().updateReminder(reminder)
+        FirebaseSyncHelper.uploadToCloud("reminders", reminder, reminder.id.toString())
+    }
+    suspend fun deleteReminder(reminder: Reminder) {
+        db.reminderDao().deleteReminder(reminder)
+        FirebaseSyncHelper.deleteFromCloud("reminders", reminder.id.toString())
+    }
 
     // Habits
     val allHabits: Flow<List<Habit>> = db.habitDao().getAllHabits()
-    suspend fun insertHabit(habit: Habit) = db.habitDao().insertHabit(habit)
-    suspend fun updateHabit(habit: Habit) = db.habitDao().updateHabit(habit)
-    suspend fun deleteHabit(habit: Habit) = db.habitDao().deleteHabit(habit)
+    suspend fun insertHabit(habit: Habit) {
+        db.habitDao().insertHabit(habit)
+        FirebaseSyncHelper.uploadToCloud("habits", habit, habit.name)
+    }
+    suspend fun updateHabit(habit: Habit) {
+        db.habitDao().updateHabit(habit)
+        FirebaseSyncHelper.uploadToCloud("habits", habit, habit.name)
+    }
+    suspend fun deleteHabit(habit: Habit) {
+        db.habitDao().deleteHabit(habit)
+        FirebaseSyncHelper.deleteFromCloud("habits", habit.name)
+    }
 
     // Water
     fun getWaterLogs(day: String): Flow<List<WaterLog>> = db.waterLogDao().getLogsByDay(day)
@@ -34,9 +62,18 @@ class DatabaseRepository(private val db: AppDatabase) {
 
     // Expenses
     val allExpenses: Flow<List<Expense>> = db.expenseDao().getAllExpenses()
-    suspend fun insertExpense(expense: Expense) = db.expenseDao().insertExpense(expense)
-    suspend fun updateExpense(expense: Expense) = db.expenseDao().updateExpense(expense)
-    suspend fun deleteExpense(expense: Expense) = db.expenseDao().deleteExpense(expense)
+    suspend fun insertExpense(expense: Expense) {
+        db.expenseDao().insertExpense(expense)
+        FirebaseSyncHelper.uploadToCloud("expenses", expense, expense.timestamp.toString())
+    }
+    suspend fun updateExpense(expense: Expense) {
+        db.expenseDao().updateExpense(expense)
+        FirebaseSyncHelper.uploadToCloud("expenses", expense, expense.timestamp.toString())
+    }
+    suspend fun deleteExpense(expense: Expense) {
+        db.expenseDao().deleteExpense(expense)
+        FirebaseSyncHelper.deleteFromCloud("expenses", expense.timestamp.toString())
+    }
     suspend fun searchExpenses(query: String): List<Expense> = db.expenseDao().searchExpenses(query)
 
     // Bills
@@ -62,9 +99,18 @@ class DatabaseRepository(private val db: AppDatabase) {
 
     // Quick Notes
     val allNotes: Flow<List<QuickNote>> = db.quickNoteDao().getAllNotes()
-    suspend fun insertNote(note: QuickNote) = db.quickNoteDao().insertNote(note)
-    suspend fun updateNote(note: QuickNote) = db.quickNoteDao().updateNote(note)
-    suspend fun deleteNote(note: QuickNote) = db.quickNoteDao().deleteNote(note)
+    suspend fun insertNote(note: QuickNote) {
+        db.quickNoteDao().insertNote(note)
+        FirebaseSyncHelper.uploadToCloud("notes", note, note.timestamp.toString())
+    }
+    suspend fun updateNote(note: QuickNote) {
+        db.quickNoteDao().updateNote(note)
+        FirebaseSyncHelper.uploadToCloud("notes", note, note.timestamp.toString())
+    }
+    suspend fun deleteNote(note: QuickNote) {
+        db.quickNoteDao().deleteNote(note)
+        FirebaseSyncHelper.deleteFromCloud("notes", note.timestamp.toString())
+    }
     suspend fun searchNotes(query: String): List<QuickNote> = db.quickNoteDao().searchNotes(query)
 
     // Personal Memories
