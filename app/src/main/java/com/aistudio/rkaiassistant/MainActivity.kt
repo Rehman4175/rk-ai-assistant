@@ -112,8 +112,6 @@ class MainActivity : FragmentActivity() {
                 } else if (!isLoggedIn && !isLoginSkipped) {
                     LoginScreen(
                         onLoginClick = { 
-                            // In a real app, this triggers Google Sign In
-                            // For now, we simulate success for demonstration if they click it
                             viewModel.loginSuccess()
                         },
                         onSkip = { viewModel.skipLogin() }

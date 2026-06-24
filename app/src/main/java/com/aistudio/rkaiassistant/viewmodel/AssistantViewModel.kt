@@ -17,8 +17,6 @@ import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
 import android.widget.Toast
 import com.aistudio.rkaiassistant.data.*
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -237,9 +235,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
     
     // Cloud Login & Backup State
-    val isLoggedIn = MutableStateFlow(FirebaseAuth.getInstance().currentUser != null)
+    val isLoggedIn = MutableStateFlow(prefs.isLoginSkipped()) // Defaulting to logged in if skipped or local
     val isLoginSkipped = MutableStateFlow(prefs.isLoginSkipped())
-    val cloudUser: FirebaseUser? get() = FirebaseAuth.getInstance().currentUser
 
     val isLocalAiAvailable = MutableStateFlow(false)
     val isImportingModel = MutableStateFlow(false)
@@ -290,11 +287,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // Security: Key is initialized in AssistantApp.onCreate for safety.
-        // We only check if it's available to update the UI state.
-        val geminiKey = prefs.getGeminiApiKey()
-
-        // Update online status
-        isOnline.value = geminiKey.isNotBlank()
+        // Update online status using a single source of truth
+        isOnline.value = GeminiService.isApiKeyConfigured()
 
         // Use Google TTS engine specifically for best Hindi/Indian English support
         try {
@@ -339,8 +333,6 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
-        // Check if API is configured
-        isOnline.value = GeminiService.isApiKeyConfigured()
 
 
         // --- Background Auto-Sync Job ---
@@ -436,55 +428,57 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun startJarvisListening() {
-        val context = getApplication<Application>()
-        if (speechRecognizer == null) {
-            speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+        viewModelScope.launch(Dispatchers.Main) {
+            val context = getApplication<Application>()
+            if (speechRecognizer == null) {
+                speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+            }
+            
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-IN") // Support Indian English
+            
+            speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    jarvisStatus.value = "Listening..."
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    jarvisStatus.value = "Processing..."
+                }
+                override fun onError(error: Int) {
+                    if (!isJarvisActive.value) return // Don't restart if turned off
+
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+
+                    if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH || error == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                        jarvisStatus.value = "Say something..."
+                        startJarvisListening() // Keep listening if no speech detected
+                    } else {
+                        jarvisStatus.value = "Error: $error"
+                        isJarvisActive.value = false
+                    }
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    if (!isJarvisActive.value) return // Don't process if turned off
+
+                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        handleJarvisVoiceCommand(matches[0])
+                    } else {
+                        startJarvisListening()
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+            
+            isJarvisActive.value = true
+            speechRecognizer?.startListening(intent)
         }
-        
-        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-IN") // Support Indian English
-        
-        speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
-            override fun onReadyForSpeech(params: android.os.Bundle?) {
-                jarvisStatus.value = "Listening..."
-            }
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {
-                jarvisStatus.value = "Processing..."
-            }
-            override fun onError(error: Int) {
-                if (!isJarvisActive.value) return // Don't restart if turned off
-
-                speechRecognizer?.destroy()
-                speechRecognizer = null
-
-                if (error == android.speech.SpeechRecognizer.ERROR_NO_MATCH || error == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    jarvisStatus.value = "Say something..."
-                    startJarvisListening() // Keep listening if no speech detected
-                } else {
-                    jarvisStatus.value = "Error: $error"
-                    isJarvisActive.value = false
-                }
-            }
-            override fun onResults(results: android.os.Bundle?) {
-                if (!isJarvisActive.value) return // Don't process if turned off
-
-                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
-                if (!matches.isNullOrEmpty()) {
-                    handleJarvisVoiceCommand(matches[0])
-                } else {
-                    startJarvisListening()
-                }
-            }
-            override fun onPartialResults(partialResults: android.os.Bundle?) {}
-            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-        })
-        
-        isJarvisActive.value = true
-        speechRecognizer?.startListening(intent)
     }
 
     private fun stopJarvisListening() {
@@ -593,36 +587,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isLoggedIn.value = true
         prefs.setLoginSkipped(false)
         isLoginSkipped.value = false
-        restoreFromCloud()
+        // restoreFromCloud() // Removed Firebase Restore
     }
 
     fun logout() {
-        FirebaseAuth.getInstance().signOut()
+        // FirebaseAuth.getInstance().signOut()
         isLoggedIn.value = false
         prefs.setLoginSkipped(false)
         isLoginSkipped.value = false
-    }
-
-    private fun restoreFromCloud() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // Restore Tasks
-                val cloudTasks = FirebaseSyncHelper.downloadFromCloud("tasks")
-                cloudTasks.forEach { map ->
-                    repository.insertTask(Task(
-                        title = map["title"] as? String ?: "",
-                        isCompleted = map["isCompleted"] as? Boolean ?: false,
-                        priority = map["priority"] as? String ?: "Medium",
-                        timestamp = map["timestamp"] as? Long ?: System.currentTimeMillis()
-                    ))
-                }
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(getApplication(), "Data restored from cloud!", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("RKAI", "Cloud Restore Error", e)
-            }
-        }
     }
 
     fun unlockWithBiometric() {

@@ -1,10 +1,10 @@
 plugins {
   alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.kotlin.android)
 }
 
 android {
@@ -83,11 +83,6 @@ secrets {
 
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
-  implementation(libs.firebase.auth)
-  implementation(libs.firebase.firestore)
-  implementation(libs.play.services.auth)
-  implementation(libs.kotlinx.coroutines.play.services)
 
   // Core Android
   implementation(libs.androidx.core.ktx)

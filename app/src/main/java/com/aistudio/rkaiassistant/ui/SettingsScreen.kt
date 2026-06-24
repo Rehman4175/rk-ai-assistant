@@ -238,22 +238,21 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Cloud Backup & Restore Section
+            // Cloud Backup & Restore Section (LOCAL BACKUP ONLY - Firebase Removed)
             val isLoggedIn by viewModel.isLoggedIn.collectAsState()
-            val cloudUser = viewModel.cloudUser
             
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(CardBackgroundGlass)
-                    .border(1.dp, if (isLoggedIn) NeonGreen else BorderColor, RoundedCornerShape(16.dp))
+                    .border(1.dp, if (isLoggedIn) NeonCyan else BorderColor, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Column {
                     Text(
-                        text = "CLOUD SYNC & BACKUP",
-                        color = if (isLoggedIn) NeonGreen else NeonCyan,
+                        text = "ACCOUNT & LOCAL BACKUP",
+                        color = NeonCyan,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -263,46 +262,33 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     
                     if (isLoggedIn) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CloudDone, null, tint = NeonGreen)
+                            Icon(Icons.Default.Settings, null, tint = NeonCyan)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Synced as ${cloudUser?.email ?: "User"}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text("Auto-backup is enabled", color = SoftTextGray, fontSize = 11.sp)
+                                Text("Local Profile Active", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text("Offline mode enabled", color = SoftTextGray, fontSize = 11.sp)
                             }
                             Spacer(modifier = Modifier.weight(1f))
                             TextButton(onClick = { viewModel.logout() }) {
                                 Text("LOGOUT", color = Color.Red.copy(alpha = 0.7f), fontSize = 12.sp)
                             }
                         }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(
-                            onClick = { 
-                                // Trigger a full sync manually
-                                Toast.makeText(context, "Full cloud sync started...", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("BACKUP NOW", color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CloudOff, null, tint = SoftTextGray)
+                            Icon(Icons.Default.RadioButtonUnchecked, null, tint = SoftTextGray)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text("Not Signed In", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text("Login to protect your data", color = SoftTextGray, fontSize = 11.sp)
+                                Text("Data saved locally", color = SoftTextGray, fontSize = 11.sp)
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = { viewModel.loginSuccess() }, // Mock login success
+                            onClick = { viewModel.loginSuccess() },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("SIGN IN WITH GOOGLE", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("LOGIN LOCALLY", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
