@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.DisposableEffect
 import com.aistudio.rkaiassistant.ui.*
 import com.aistudio.rkaiassistant.ui.theme.MyApplicationTheme
@@ -51,7 +53,13 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         // Initialize WorkManager alert and report background systems
-        scheduleAllWorkers(this)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                scheduleAllWorkers(this@MainActivity)
+            } catch (t: Throwable) {
+                android.util.Log.e("RKAI", "WorkManager Init Error", t)
+            }
+        }
 
         setContent {
             MyApplicationTheme {

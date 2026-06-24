@@ -284,8 +284,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 withContext(Dispatchers.Main) {
                     isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("RKAI", "Local AI Init Error", e)
+            } catch (t: Throwable) {
+                android.util.Log.e("RKAI", "Local AI Init Error", t)
             }
         }
 
@@ -297,39 +297,48 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         isOnline.value = geminiKey.isNotBlank()
 
         // Use Google TTS engine specifically for best Hindi/Indian English support
-        tts = TextToSpeech(application, { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                // Try to set Hindi first
-                val locale = Locale("hi", "IN")
-                val result = tts?.setLanguage(locale)
-                
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    // Fallback to Indian English which handles Hinglish much better than US accent
+        try {
+            tts = TextToSpeech(application, { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    // Try to set Hindi first
+                    val locale = Locale("hi", "IN")
+                    val result = tts?.setLanguage(locale)
+                    
+                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        // Fallback to Indian English which handles Hinglish much better than US accent
+                        tts?.setLanguage(Locale("en", "IN"))
+                    }
+                    
+                    // Try to select a high-quality (Natural/Network) voice if available
+                    try {
+                        val voices = tts?.voices
+                        if (!voices.isNullOrEmpty()) {
+                            // Priority: 1. Hindi Network/Neural, 2. Hindi Local High Quality, 3. Hindi Any, 4. English India
+                            val bestVoice = voices.filter { it.locale.language == "hi" }
+                                .sortedWith(compareByDescending<android.speech.tts.Voice> { 
+                                    it.name.lowercase().contains("network") || it.name.lowercase().contains("neural") 
+                                }.thenByDescending { 
+                                    it.quality >= android.speech.tts.Voice.QUALITY_HIGH
+                                }.thenByDescending {
+                                    !it.isNetworkConnectionRequired // Prefer offline if high quality is same
+                                }).firstOrNull() ?: voices.find { it.locale.language == "en" && it.locale.country == "IN" }
+                            
+                            bestVoice?.let { tts?.voice = it }
+                        }
+                    } catch (e: Exception) {}
+
+                    tts?.setPitch(1.0f)
+                    tts?.setSpeechRate(0.92f) // Slightly slower for better Hinglish clarity
+                }
+            }, "com.google.android.tts")
+        } catch (t: Throwable) {
+            android.util.Log.e("RKAI", "TTS Init Error with specific engine, falling back", t)
+            tts = TextToSpeech(application) { status ->
+                if (status == TextToSpeech.SUCCESS) {
                     tts?.setLanguage(Locale("en", "IN"))
                 }
-                
-                // Try to select a high-quality (Natural/Network) voice if available
-                try {
-                    val voices = tts?.voices
-                    if (!voices.isNullOrEmpty()) {
-                        // Priority: 1. Hindi Network/Neural, 2. Hindi Local High Quality, 3. Hindi Any, 4. English India
-                        val bestVoice = voices.filter { it.locale.language == "hi" }
-                            .sortedWith(compareByDescending<android.speech.tts.Voice> { 
-                                it.name.lowercase().contains("network") || it.name.lowercase().contains("neural") 
-                            }.thenByDescending { 
-                                it.quality >= android.speech.tts.Voice.QUALITY_HIGH
-                            }.thenByDescending {
-                                !it.isNetworkConnectionRequired // Prefer offline if high quality is same
-                            }).firstOrNull() ?: voices.find { it.locale.language == "en" && it.locale.country == "IN" }
-                        
-                        bestVoice?.let { tts?.voice = it }
-                    }
-                } catch (e: Exception) {}
-
-                tts?.setPitch(1.0f)
-                tts?.setSpeechRate(0.92f) // Slightly slower for better Hinglish clarity
             }
-        }, "com.google.android.tts")
+        }
         // Check if API is configured
         isOnline.value = GeminiService.isApiKeyConfigured()
 

@@ -24,11 +24,7 @@ class AssistantApp : Application() {
 
         Log.d(TAG, "Application is initializing...")
 
-        // 1. Load SQLCipher native library FIRST and SYNCHRONOUSLY
-        // This is critical because the Database might be accessed immediately after Application.onCreate
-        loadSqlCipher()
-
-        // 2. Initialize Gemini Service safely
+        // 1. Initialize Gemini Service safely
         initializeGeminiService()
     }
 
@@ -49,22 +45,6 @@ class AssistantApp : Application() {
             }
         } catch (t: Throwable) {
             Log.e(TAG, "CRITICAL: Gemini Service initialization failed: ${t.message}", t)
-        }
-    }
-
-    /**
-     * Load SQLCipher native library safely
-     */
-    private fun loadSqlCipher() {
-        try {
-            // For SQLCipher 4, we try to load the library. 
-            // Note: net.zetetic:sqlcipher-android usually loads its own native libs,
-            // but manual loading can prevent race conditions.
-            System.loadLibrary("sqlcipher")
-            Log.d(TAG, "SQLCipher native library loaded successfully!")
-        } catch (t: Throwable) {
-            // We catch Throwable to handle LinkageError/UnsatisfiedLinkError
-            Log.w(TAG, "SQLCipher native library load info: ${t.message}. This is often fine if the library is loaded later by Room.")
         }
     }
 }
