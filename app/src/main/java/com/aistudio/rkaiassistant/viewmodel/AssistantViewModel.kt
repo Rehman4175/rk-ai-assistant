@@ -235,7 +235,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
     
     // Cloud Login & Backup State
-    val isLoggedIn = MutableStateFlow(prefs.isLoginSkipped()) // Defaulting to logged in if skipped or local
+    val isLoggedIn = MutableStateFlow(true)
     val isLoginSkipped = MutableStateFlow(prefs.isLoginSkipped())
 
     val isLocalAiAvailable = MutableStateFlow(false)
