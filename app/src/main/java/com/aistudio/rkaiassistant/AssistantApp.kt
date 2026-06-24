@@ -24,7 +24,7 @@ class AssistantApp : Application() {
 
         Log.d(TAG, "Application is initializing...")
 
-        // 1. Initialize Gemini Service safely
+        // 2. Initialize Gemini Service safely
         initializeGeminiService()
     }
 

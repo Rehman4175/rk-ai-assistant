@@ -232,11 +232,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val aiIsGenerating = MutableStateFlow(false)
     val textToSpeechEnabled = MutableStateFlow(true)
     val isSpeaking = MutableStateFlow(false)
-    val isOnline = MutableStateFlow(GeminiService.isApiKeyConfigured())
+    val isOnline = MutableStateFlow(false)
     
     // Cloud Login & Backup State
     val isLoggedIn = MutableStateFlow(true)
-    val isLoginSkipped = MutableStateFlow(prefs.isLoginSkipped())
+    val isLoginSkipped = MutableStateFlow(false)
 
     val isLocalAiAvailable = MutableStateFlow(false)
     val isImportingModel = MutableStateFlow(false)
@@ -288,7 +288,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         // Security: Key is initialized in AssistantApp.onCreate for safety.
         // Update online status using a single source of truth
-        isOnline.value = GeminiService.isApiKeyConfigured()
+        try {
+            isOnline.value = GeminiService.isApiKeyConfigured()
+            isLoginSkipped.value = prefs.isLoginSkipped()
+        } catch (e: Exception) {
+            android.util.Log.e("RKAI", "Init State Error", e)
+        }
 
         // Use Google TTS engine specifically for best Hindi/Indian English support
         try {

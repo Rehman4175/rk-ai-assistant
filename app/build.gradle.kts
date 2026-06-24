@@ -77,8 +77,8 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   // Security Fix: Prevent sensitive API keys from being injected into BuildConfig
-  ignoreList.add("GEMINI_API_KEY")
   ignoreList.add("WEATHER_API_KEY")
+  ignoreList.add("GEMINI_API_KEY")
 }
 
 dependencies {

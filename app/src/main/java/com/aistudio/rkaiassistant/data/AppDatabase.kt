@@ -56,16 +56,16 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val prefs = SecurePrefHelper(context)
-                var passphrase = prefs.getDbPassphrase()
-                
-                if (passphrase == null) {
-                    passphrase = ByteArray(32)
-                    SecureRandom().nextBytes(passphrase)
-                    prefs.saveDbPassphrase(passphrase)
-                }
-
                 try {
+                    val prefs = SecurePrefHelper(context)
+                    var passphrase = prefs.getDbPassphrase()
+                    
+                    if (passphrase == null) {
+                        passphrase = ByteArray(32)
+                        SecureRandom().nextBytes(passphrase)
+                        prefs.saveDbPassphrase(passphrase)
+                    }
+
                     val factory = SupportOpenHelperFactory(passphrase)
                     
                     val instance = Room.databaseBuilder(
@@ -78,31 +78,17 @@ abstract class AppDatabase : RoomDatabase() {
                     .build()
                     INSTANCE = instance
                     instance
-                } catch (e: Exception) {
-                    android.util.Log.e("RKAI", "SQLCipher failed, falling back to unencrypted database!", e)
-                    // Fallback to unencrypted database so the app at least opens and works
+                } catch (t: Throwable) {
+                    android.util.Log.e("RKAI", "CRITICAL: Database initialization failed! Falling back to unencrypted.", t)
                     val fallbackInstance = Room.databaseBuilder(
                         context.applicationContext,
                         AppDatabase::class.java,
-                        "rk_assistant_database_unencrypted"
+                        "rk_assistant_database_unencrypted_emergency"
                     )
                     .fallbackToDestructiveMigration()
                     .build()
                     INSTANCE = fallbackInstance
                     fallbackInstance
-                } catch (e: Throwable) {
-                    // Catch LinkageErrors etc.
-                    android.util.Log.e("RKAI", "Critical failure in database init!", e)
-                    // We try one last time with no encryption if it's a native loading issue
-                    val finalFallback = Room.databaseBuilder(
-                        context.applicationContext,
-                        AppDatabase::class.java,
-                        "rk_assistant_database_unencrypted_final"
-                    )
-                    .fallbackToDestructiveMigration()
-                    .build()
-                    INSTANCE = finalFallback
-                    finalFallback
                 }
             }
         }
