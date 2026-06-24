@@ -109,6 +109,13 @@ class MainActivity : FragmentActivity() {
 
                 if (isLocked) {
                     SecurityScreen(viewModel)
+                } else if (!isLoggedIn && !isLoginSkipped) {
+                    LoginScreen(
+                        onLoginClick = {
+                            viewModel.loginSuccess()
+                        },
+                        onSkip = { viewModel.skipLogin() }
+                    )
                 } else {
                     MainAppContent(viewModel)
                 }
