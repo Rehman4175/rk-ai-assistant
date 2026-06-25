@@ -24,8 +24,19 @@ class AssistantApp : Application() {
 
         Log.d(TAG, "Application is initializing...")
 
+        // 1. Initialize SQLCipher native libraries (CRITICAL for encrypted database)
+        try {
+            System.loadLibrary("sqlcipher")
+            Log.d(TAG, "SQLCipher native libraries loaded successfully.")
+        } catch (t: Throwable) {
+            Log.e(TAG, "CRITICAL: SQLCipher load failed: ${t.message}", t)
+        }
+
         // 2. Initialize Gemini Service safely
         initializeGeminiService()
+
+        // 3. Initialize Google Auth with your Client ID
+        com.aistudio.rkaiassistant.data.GoogleAuthHelper.serverClientId = "879298355170-rp7s7vngjg60vhpn6p55cfoi86c1ort2.apps.googleusercontent.com"
     }
 
     /**

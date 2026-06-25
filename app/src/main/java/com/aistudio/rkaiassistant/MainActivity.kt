@@ -41,6 +41,10 @@ import com.aistudio.rkaiassistant.ui.theme.SoftTextGray
 import com.aistudio.rkaiassistant.viewmodel.AppScreen
 import com.aistudio.rkaiassistant.viewmodel.AssistantViewModel
 import com.aistudio.rkaiassistant.data.scheduleAllWorkers
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
+import com.google.api.services.drive.DriveScopes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
@@ -107,12 +111,33 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
+                // Google Sign-In Launcher
+                val googleSignInLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    try {
+                        val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                        if (account != null) {
+                            viewModel.loginSuccess()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Google Sign-In failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
                 if (isLocked) {
                     SecurityScreen(viewModel)
                 } else if (!isLoggedIn && !isLoginSkipped) {
                     LoginScreen(
                         onLoginClick = {
-                            viewModel.loginSuccess()
+                            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                .requestEmail()
+                                .requestIdToken("879298355170-rp7s7vngjg60vhpn6p55cfoi86c1ort2.apps.googleusercontent.com")
+                                .requestScopes(Scope(DriveScopes.DRIVE_APPDATA))
+                                .build()
+                            val client = GoogleSignIn.getClient(this@MainActivity, gso)
+                            googleSignInLauncher.launch(client.signInIntent)
                         },
                         onSkip = { viewModel.skipLogin() }
                     )

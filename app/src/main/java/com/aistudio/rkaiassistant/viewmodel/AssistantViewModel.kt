@@ -17,6 +17,9 @@ import androidx.lifecycle.viewModelScope
 import android.net.NetworkRequest
 import android.widget.Toast
 import com.aistudio.rkaiassistant.data.*
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.api.services.drive.DriveScopes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -235,7 +238,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val isOnline = MutableStateFlow(false)
     
     // Cloud Login & Backup State
-    val isLoggedIn = MutableStateFlow(true)
+    val isLoggedIn = MutableStateFlow(GoogleSignIn.getLastSignedInAccount(application) != null)
+    val userName = MutableStateFlow(GoogleSignIn.getLastSignedInAccount(application)?.displayName ?: "User")
+    val userEmail = MutableStateFlow(GoogleSignIn.getLastSignedInAccount(application)?.email ?: "No Email")
     val isLoginSkipped = MutableStateFlow(false)
 
     val isLocalAiAvailable = MutableStateFlow(false)
@@ -589,17 +594,54 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun loginSuccess() {
+        val account = GoogleSignIn.getLastSignedInAccount(getApplication())
         isLoggedIn.value = true
+        userName.value = account?.displayName ?: "User"
+        userEmail.value = account?.email ?: "No Email"
         prefs.setLoginSkipped(false)
         isLoginSkipped.value = false
-        // restoreFromCloud() // Removed Firebase Restore
+        // Trigger auto-restore if needed
+        viewModelScope.launch {
+            val backup = GoogleDriveService.downloadBackup(getApplication())
+            if (backup != null) {
+                restoreBackup(backup)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "Data restored from Google Drive!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     fun logout() {
-        // FirebaseAuth.getInstance().signOut()
-        isLoggedIn.value = false
-        prefs.setLoginSkipped(false)
-        isLoginSkipped.value = false
+        viewModelScope.launch {
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .build()
+            val client = GoogleSignIn.getClient(getApplication<Application>(), gso)
+            client.signOut()
+            isLoggedIn.value = false
+            userName.value = "User"
+            userEmail.value = "No Email"
+            prefs.setLoginSkipped(false)
+            isLoginSkipped.value = false
+        }
+    }
+
+    fun backupToDrive() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            if (GoogleSignIn.getLastSignedInAccount(context) == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Please Login with Google first!", Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            val json = getFullBackupJson()
+            val success = GoogleDriveService.uploadBackup(context, json)
+            withContext(Dispatchers.Main) {
+                if (success) Toast.makeText(context, "Backup saved to Google Drive!", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(context, "Drive Backup failed!", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     fun unlockWithBiometric() {

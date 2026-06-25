@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BugReport
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -261,12 +263,15 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     if (isLoggedIn) {
+                        val userName by viewModel.userName.collectAsState()
+                        val userEmail by viewModel.userEmail.collectAsState()
+                        
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Settings, null, tint = NeonCyan)
+                            Icon(Icons.Default.AccountCircle, null, tint = NeonCyan, modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Local Profile Active", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Text("Offline mode enabled", color = SoftTextGray, fontSize = 11.sp)
+                                Text(userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(userEmail, color = SoftTextGray, fontSize = 11.sp)
                             }
                             Spacer(modifier = Modifier.weight(1f))
                             TextButton(onClick = { viewModel.logout() }) {
@@ -386,6 +391,49 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
+
+                    // Google Drive Backup Section
+                    Text(
+                        text = "GOOGLE DRIVE DATA BACKUP",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    val scope = rememberCoroutineScope()
+                    Button(
+                        onClick = { viewModel.backupToDrive() },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.CloudDone, null, tint = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("BACKUP TO MY GOOGLE DRIVE", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { 
+                            scope.launch {
+                                val backup = GoogleDriveService.downloadBackup(context)
+                                if (backup != null) {
+                                    val success = viewModel.restoreBackup(backup)
+                                    if (success) Toast.makeText(context, "Data restored from Drive!", Toast.LENGTH_SHORT).show()
+                                    else Toast.makeText(context, "Restore failed!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "No backup found on Drive!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                    ) {
+                        Icon(Icons.Default.CloudOff, null, tint = NeonCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("RESTORE FROM GOOGLE DRIVE", color = Color.White)
+                    }
 
                     HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
@@ -527,7 +575,7 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(androidx.compose.material.icons.Icons.Default.Fingerprint, null, tint = if (isBioAvailable) NeonCyan else SoftTextGray)
+                            Icon(Icons.Default.Fingerprint, null, tint = if (isBioAvailable) NeonCyan else SoftTextGray)
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text("Biometric Support", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)

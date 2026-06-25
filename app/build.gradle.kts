@@ -1,6 +1,5 @@
 plugins {
   alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
@@ -47,6 +46,9 @@ android {
   }
 
   packaging {
+    resources {
+      excludes += "/META-INF/{AL2.0,LGPL2.1,INDEX.LIST,DEPENDENCIES,LICENSE,LICENSE.txt,NOTICE,NOTICE.txt}"
+    }
     jniLibs {
       useLegacyPackaging = true
     }
@@ -66,9 +68,6 @@ android {
     unitTests {
       isIncludeAndroidResources = true
     }
-  }
-  kotlinOptions {
-    jvmTarget = "11"
   }
 }
 
@@ -137,6 +136,18 @@ dependencies {
   // Security & Encryption
   implementation(libs.sqlcipher)
   implementation(libs.androidx.security.crypto)
+
+  // Google Drive & Auth
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services.auth)
+  implementation(libs.googleid)
+  implementation(libs.play.services.auth)
+  implementation(libs.google.api.client.and)
+  implementation(libs.google.api.client.gs)
+  implementation(libs.google.api.services.dr)
+  implementation(libs.google.http.client.gs)
+  implementation(libs.google.http.client.and)
+  implementation(libs.kotlinx.coroutines.play.services)
 
   // Testing
   testImplementation(libs.junit)
