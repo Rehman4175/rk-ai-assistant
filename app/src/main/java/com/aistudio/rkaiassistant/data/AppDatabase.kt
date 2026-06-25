@@ -74,6 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
                         "rk_assistant_database_v3"
                     )
                     .openHelperFactory(factory)
+                    // TODO: Implement proper migrations for production to avoid data loss
                     .fallbackToDestructiveMigration()
                     .build()
                     INSTANCE = instance
@@ -85,6 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         "rk_assistant_database_unencrypted_emergency"
                     )
+                    // TODO: Implement proper migrations for production to avoid data loss
                     .fallbackToDestructiveMigration()
                     .build()
                     INSTANCE = fallbackInstance

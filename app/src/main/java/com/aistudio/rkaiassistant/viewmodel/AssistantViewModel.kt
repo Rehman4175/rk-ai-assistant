@@ -235,7 +235,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val aiIsGenerating = MutableStateFlow(false)
     val textToSpeechEnabled = MutableStateFlow(true)
     val isSpeaking = MutableStateFlow(false)
-    val isOnline = MutableStateFlow(false)
+    val isGeminiReady = MutableStateFlow(false)
     
     // Cloud Login & Backup State
     val isLoggedIn = MutableStateFlow(GoogleSignIn.getLastSignedInAccount(application) != null)
@@ -294,7 +294,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         // Security: Key is initialized in AssistantApp.onCreate for safety.
         // Update online status using a single source of truth
         try {
-            isOnline.value = GeminiService.isApiKeyConfigured()
+            isGeminiReady.value = GeminiService.isApiKeyConfigured()
             isLoginSkipped.value = prefs.isLoginSkipped()
         } catch (e: Exception) {
             android.util.Log.e("RKAI", "Init State Error", e)
@@ -535,7 +535,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 localResult
             } else {
                 var aiRes: String? = null
-                if (isOnline.value && isNetworkAvailable() && GeminiService.isApiKeyConfigured()) {
+                if (isGeminiReady.value && isNetworkAvailable()) {
                     aiRes = GeminiService.chat(
                         text, 
                         "You are RK, a helpful personal assistant. Introduce yourself as 'Main RK, aapka personal voice assistant hoon'. Speak in natural, polite Hindi/Hinglish.",
@@ -745,7 +745,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             jarvisStatus.value = "Analyzing context..."
             
             // Try AI parsing first if online
-            if (isNetworkAvailable() && isOnline.value) {
+            if (isNetworkAvailable() && isGeminiReady.value) {
                 val aiResult = trySmartAiParsing("remind me to $text")
                 if (aiResult != null) {
                     speak("System update: $aiResult")

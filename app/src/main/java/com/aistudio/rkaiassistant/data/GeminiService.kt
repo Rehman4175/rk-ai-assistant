@@ -297,52 +297,22 @@ object GoogleSheetsService {
     suspend fun sync(jsonPayload: String, scriptUrl: String): Boolean {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val mediaType = "application/json".toMediaType()
-            var currentUrl = scriptUrl
-            var redirectCount = 0
-            val maxRedirects = 5
-
+            val trimmedUrl = scriptUrl.trim()
+            
             try {
-                val client = okHttpClient.newBuilder()
-                    .followRedirects(false)
-                    .followSslRedirects(false)
+                val request = okhttp3.Request.Builder()
+                    .url(trimmedUrl)
+                    .header("User-Agent", "RK-AI-Assistant-Android")
+                    .post(jsonPayload.toRequestBody(mediaType))
                     .build()
 
-                var response: okhttp3.Response? = null
-
-                while (redirectCount < maxRedirects) {
-                    val request = okhttp3.Request.Builder()
-                        .url(currentUrl)
-                        .header("User-Agent", "RK-AI-Assistant-Android")
-                        .post(jsonPayload.toRequestBody(mediaType))
-                        .build()
-
-                    val nextResponse = client.newCall(request).execute()
+                okHttpClient.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string() ?: ""
+                    val code = response.code
                     
-                    if (nextResponse.code in 300..308) {
-                        val location = nextResponse.header("Location")
-                        nextResponse.close()
-                        if (location != null) {
-                            currentUrl = if (location.startsWith("http")) {
-                                location
-                            } else {
-                                currentUrl.toHttpUrl().resolve(location)?.toString() ?: location
-                            }
-                            redirectCount++
-                            continue
-                        }
-                    }
-                    
-                    response = nextResponse
-                    break
+                    // Apps Script 302 redirects handle hone ke baad code 200 aur "Success" aana chahiye
+                    code == 200 && responseBody.contains("Success", ignoreCase = true)
                 }
-
-                if (response == null) return@withContext false
-
-                val responseBody = response.body?.string() ?: ""
-                val code = response.code
-                response.close()
-
-                code == 200 && responseBody.contains("Success", ignoreCase = true)
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
