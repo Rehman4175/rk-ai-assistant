@@ -453,22 +453,32 @@ class DailyBriefingWorker(val context: Context, workerParams: WorkerParameters) 
 class DailyRecurringWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result {
         val db = AppDatabase.getDatabase(context)
-        val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        val now = Calendar.getInstance()
+        val dayOfMonth = now.get(Calendar.DAY_OF_MONTH)
+        val dayOfWeek = now.get(Calendar.DAY_OF_WEEK)
         
         // Find recurring reminders that should fire today
         val recurring = db.recurringReminderDao().getAll().first()
         recurring.forEach { rem ->
-            // Logic: If 'time' field contains day of month like "Day 3" or similar
-            // For now, simple match (this can be expanded with a specific field)
-            if (rem.isActive && rem.time.contains("Day $dayOfMonth")) {
-                sendAndroidNotification(
-                    context, 
-                    rem.id + 20000, 
-                    "recurring_channel", 
-                    "Bill Reminders", 
-                    "📅 Recurring: ${rem.title}", 
-                    "Today is day $dayOfMonth. Don't forget: ${rem.title}"
-                )
+            if (rem.isActive && !rem.isDeleted) {
+                val createdCal = Calendar.getInstance().apply { timeInMillis = rem.createdAt }
+                val shouldFire = when (rem.type.lowercase(Locale.US)) {
+                    "daily" -> true
+                    "weekly" -> createdCal.get(Calendar.DAY_OF_WEEK) == dayOfWeek
+                    "monthly" -> createdCal.get(Calendar.DAY_OF_MONTH) == dayOfMonth
+                    else -> rem.time.contains("Day $dayOfMonth") // fallback matching old buggy logic if any
+                }
+                
+                if (shouldFire) {
+                    sendAndroidNotification(
+                        context, 
+                        rem.id + 20000, 
+                        "recurring_channel", 
+                        "Bill Reminders", 
+                        "📅 Recurring: ${rem.title}", 
+                        "Scheduled time: ${rem.time}. Don't forget: ${rem.title}"
+                    )
+                }
             }
         }
         

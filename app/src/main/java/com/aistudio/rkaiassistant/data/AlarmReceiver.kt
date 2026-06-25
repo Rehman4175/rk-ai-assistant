@@ -25,20 +25,25 @@ class AlarmReceiver : BroadcastReceiver() {
 
             // 2. Trigger a message in the AI Console (Works OFFLINE)
             val db = AppDatabase.getDatabase(context)
+            val pendingResult = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
-                // Mark reminder as done
-                val all = db.reminderDao().getAllRemindersList()
-                val match = all.find { it.id == reminderId }
-                if (match != null) {
-                    db.reminderDao().updateReminder(match.copy(isAcknowledged = true))
-                }
+                try {
+                    // Mark reminder as done
+                    val all = db.reminderDao().getAllRemindersList()
+                    val match = all.find { it.id == reminderId }
+                    if (match != null) {
+                        db.reminderDao().updateReminder(match.copy(isAcknowledged = true))
+                    }
 
-                // Insert RK's automated response into the chat
-                db.chatMessageDao().insertMessage(ChatMessage(
-                    chatSessionId = "default",
-                    sender = "Rk",
-                    text = "⏰ Reminder Triggered: \"$title\". I hope you completed this task! ✅"
-                ))
+                    // Insert RK's automated response into the chat
+                    db.chatMessageDao().insertMessage(ChatMessage(
+                        chatSessionId = "default",
+                        sender = "Rk",
+                        text = "⏰ Reminder Triggered: \"$title\". I hope you completed this task! ✅"
+                    ))
+                } finally {
+                    pendingResult.finish()
+                }
             }
         }
     }

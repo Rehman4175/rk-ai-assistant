@@ -2,8 +2,9 @@ package com.aistudio.rkaiassistant.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 
-@Entity(tableName = "tasks")
+@Entity(tableName = "tasks", indices = [Index("isCompleted"), Index("dueDate")])
 data class Task(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
@@ -21,7 +22,7 @@ data class Task(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "reminders")
+@Entity(tableName = "reminders", indices = [Index("isAcknowledged"), Index("dueDateTime")])
 data class Reminder(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val title: String,
@@ -50,7 +51,7 @@ data class Habit(
     val remarks: String = ""
 )
 
-@Entity(tableName = "water_logs")
+@Entity(tableName = "water_logs", indices = [Index("dayString")])
 data class WaterLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val mlAmount: Int,
@@ -60,7 +61,7 @@ data class WaterLog(
     val remarks: String = ""
 )
 
-@Entity(tableName = "expenses")
+@Entity(tableName = "expenses", indices = [Index("dateString")])
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val amount: Double,
@@ -105,7 +106,7 @@ data class CalendarEvent(
     val remarks: String = ""
 )
 
-@Entity(tableName = "diary_entries")
+@Entity(tableName = "diary_entries", indices = [Index("dateString")])
 data class DiaryEntry(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val dateString: String, // YYYY-MM-DD
@@ -140,7 +141,7 @@ data class PersonalMemory(
     val remarks: String = ""
 )
 
-@Entity(tableName = "chat_messages")
+@Entity(tableName = "chat_messages", indices = [Index("chatSessionId")])
 data class ChatMessage(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val chatSessionId: String = "default",

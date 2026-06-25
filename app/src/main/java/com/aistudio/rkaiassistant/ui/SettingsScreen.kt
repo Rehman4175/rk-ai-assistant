@@ -57,6 +57,7 @@ import java.io.OutputStream
 @Composable
 fun SettingsScreen(viewModel: AssistantViewModel) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var waterGoalInput by remember { mutableStateOf(viewModel.prefs.getWaterGoal().toString()) }
     var budgetInput by remember { mutableStateOf(viewModel.prefs.getExpenseBudget().toString()) }
@@ -125,18 +126,20 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-                if (inputStream != null) {
-                    val success = viewModel.importBackupJson(inputStream)
-                    if (success) {
-                        Toast.makeText(context, "Data restoration finished successfully!", Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(context, "Data restoration failed. Verify file format.", Toast.LENGTH_LONG).show()
+            scope.launch {
+                try {
+                    val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                    if (inputStream != null) {
+                        val success = viewModel.importBackupJson(inputStream)
+                        if (success) {
+                            Toast.makeText(context, "Data restoration finished successfully!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Data restoration failed. Verify file format.", Toast.LENGTH_LONG).show()
+                        }
                     }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -403,7 +406,6 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         fontFamily = FontFamily.Monospace
                     )
 
-                    val scope = rememberCoroutineScope()
                     Button(
                         onClick = { viewModel.backupToDrive() },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),

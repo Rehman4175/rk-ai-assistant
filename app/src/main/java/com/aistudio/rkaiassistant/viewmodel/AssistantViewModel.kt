@@ -345,18 +345,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
 
-        // --- Background Auto-Sync Job ---
-        viewModelScope.launch(Dispatchers.IO) {
-            while (true) {
-                kotlinx.coroutines.delay(900000) // Every 15 minutes as fallback
-                if (isNetworkAvailable()) {
-                    val url = prefs.getGoogleScriptUrl()
-                    if (url.isNotBlank()) {
-                        syncToGoogleSheets(url)
-                    }
-                }
-            }
-        }
+
     }
 
     private fun triggerImmediateSync() {
@@ -393,16 +382,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 .replace("InshAllah", "In-sha-Allah")
                 .replace("MashAllah", "Ma-sha-Allah")
                 .replace("SubhanAllah", "Sub-han-Allah")
-                .replace("RK", "R. K.")
-                .replace("sir", "sir,") 
-                .replace("theek", "theek")
-                .replace("kaise ho", "kaise ho?")
-                .replace("kya ", "kya, ")
-                .replace("hoon", "hoon.")
-                .replace("samajh", "samajh")
-                .replace("kar raha", "kar raha")
-                .replace("thoda", "thoda")
-                .replace("acha", "achha")
+                .replace(Regex("\\bRK\\b"), "R. K.")
+                .replace(Regex("\\bsir\\b"), "sir,") 
+                .replace(Regex("\\btheek\\b"), "theek")
+                .replace(Regex("\\bkaise ho\\b"), "kaise ho?")
+                .replace(Regex("\\bkya\\b "), "kya, ")
+                .replace(Regex("\\bhoon\\b"), "hoon.")
+                .replace(Regex("\\bsamajh\\b"), "samajh")
+                .replace(Regex("\\bkar raha\\b"), "kar raha")
+                .replace(Regex("\\bthoda\\b"), "thoda")
+                .replace(Regex("\\bacha\\b"), "achha")
             
             val listener = object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
@@ -1046,11 +1035,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 When the user asks for a 'briefing' or 'summary', provide a concise overview of their day, pending tasks, and financial status.
             """.trimIndent()
 
-            val aiResponse = if (isNetworkAvailable()) {
+                val aiResponse = if (isNetworkAvailable()) {
                 GeminiService.chat(
                     prompt = userPrompt,
                     systemInstruction = systemContext,
-                    chatHistory = chatMessages.value.dropLast(1),
+                    chatHistory = if (chatMessages.value.size > 1) chatMessages.value.dropLast(1) else emptyList(),
                     onError = { errorMsg ->
                         viewModelScope.launch(Dispatchers.Main) {
                             Toast.makeText(getApplication(), errorMsg, Toast.LENGTH_SHORT).show()
@@ -1562,7 +1551,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         root.put("privateSpaceItems", JSONArray(repository.allPrivateSpaceItems.first().map { p ->
             JSONObject().apply {
-                put("title", p.title); put("content", p.content); put("category", p.category)
+                put("title", p.title); put("content", cryptoManager.decryptString(p.content)); put("category", p.category)
                 put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
                 put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
             }
@@ -1577,223 +1566,221 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun restoreBackup(jsonString: String): Boolean {
-        return try {
+    suspend fun restoreBackup(jsonString: String): Boolean = withContext(Dispatchers.IO) {
+        try {
             val root = JSONObject(jsonString)
             
             // Stability Fix: Basic validation before restoring
             if (!root.has("tasks") && !root.has("expenses") && !root.has("notes")) {
-                return false 
+                return@withContext false 
             }
 
-            viewModelScope.launch {
-                // Restore each category safely
-                if (root.has("tasks")) {
-                    val arr = root.getJSONArray("tasks")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertTask(Task(
-                            title = obj.getString("title"), isCompleted = obj.optBoolean("isCompleted"),
-                            priority = obj.optString("priority", "Medium"), label = obj.optString("label", "General"),
-                            dueDate = obj.optString("dueDate"), notes = obj.optString("notes"),
-                            isRepeating = obj.optBoolean("isRepeating"), repeatInterval = obj.optString("repeatInterval"),
-                            createdDate = obj.optString("createdDate"), doneDate = obj.optString("doneDate"),
-                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
-                        ))
-                    }
+            // Restore each category safely
+            if (root.has("tasks")) {
+                val arr = root.getJSONArray("tasks")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertTask(Task(
+                        title = obj.getString("title"), isCompleted = obj.optBoolean("isCompleted"),
+                        priority = obj.optString("priority", "Medium"), label = obj.optString("label", "General"),
+                        dueDate = obj.optString("dueDate"), notes = obj.optString("notes"),
+                        isRepeating = obj.optBoolean("isRepeating"), repeatInterval = obj.optString("repeatInterval"),
+                        createdDate = obj.optString("createdDate"), doneDate = obj.optString("doneDate"),
+                        isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    ))
                 }
-                
-                if (root.has("reminders")) {
-                    val arr = root.getJSONArray("reminders")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertReminder(Reminder(
-                            title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
-                            recurrence = obj.optString("recurrence", "None"), isAcknowledged = obj.optBoolean("isAcknowledged"),
-                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), chatId = obj.optString("chatId"),
-                            lastFired = obj.optLong("lastFired"), remarks = obj.optString("remarks"), isDeleted = obj.optBoolean("isDeleted")
-                        ))
-                    }
+            }
+            
+            if (root.has("reminders")) {
+                val arr = root.getJSONArray("reminders")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertReminder(Reminder(
+                        title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
+                        recurrence = obj.optString("recurrence", "None"), isAcknowledged = obj.optBoolean("isAcknowledged"),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()), chatId = obj.optString("chatId"),
+                        lastFired = obj.optLong("lastFired"), remarks = obj.optString("remarks"), isDeleted = obj.optBoolean("isDeleted")
+                    ))
                 }
+            }
 
-                if (root.has("expenses")) {
-                    val arr = root.getJSONArray("expenses")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertExpense(Expense(
-                            amount = obj.getDouble("amount"), title = obj.getString("title"),
-                            isIncome = obj.optBoolean("isIncome"), category = obj.optString("category", "Food"),
-                            dateString = obj.getString("dateString"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("expenses")) {
+                val arr = root.getJSONArray("expenses")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertExpense(Expense(
+                        amount = obj.getDouble("amount"), title = obj.getString("title"),
+                        isIncome = obj.optBoolean("isIncome"), category = obj.optString("category", "Food"),
+                        dateString = obj.getString("dateString"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("habits")) {
-                    val arr = root.getJSONArray("habits")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertHabit(Habit(
-                            name = obj.getString("name"), type = obj.optString("type", "Water"),
-                            emoji = obj.optString("emoji", "✅"), loggedDaysCommaSeparated = obj.optString("loggedDaysCommaSeparated"),
-                            streakCount = obj.optInt("streakCount"), bestStreak = obj.optInt("bestStreak"),
-                            lastLoggedTimestamp = obj.optLong("lastLoggedTimestamp"), targetPerDay = obj.optString("targetPerDay"),
-                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("habits")) {
+                val arr = root.getJSONArray("habits")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertHabit(Habit(
+                        name = obj.getString("name"), type = obj.optString("type", "Water"),
+                        emoji = obj.optString("emoji", "✅"), loggedDaysCommaSeparated = obj.optString("loggedDaysCommaSeparated"),
+                        streakCount = obj.optInt("streakCount"), bestStreak = obj.optInt("bestStreak"),
+                        lastLoggedTimestamp = obj.optLong("lastLoggedTimestamp"), targetPerDay = obj.optString("targetPerDay"),
+                        isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("waterLogs")) {
-                    val arr = root.getJSONArray("waterLogs")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertWaterLog(WaterLog(
-                            mlAmount = obj.getInt("mlAmount"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            dayString = obj.getString("dayString"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("waterLogs")) {
+                val arr = root.getJSONArray("waterLogs")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertWaterLog(WaterLog(
+                        mlAmount = obj.getInt("mlAmount"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        dayString = obj.getString("dayString"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("bills")) {
-                    val arr = root.getJSONArray("bills")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertBill(Bill(
-                            name = obj.getString("name"), amount = obj.getDouble("amount"), category = obj.optString("category", "Mobile"),
-                            dueDayOfMonth = obj.optInt("dueDayOfMonth", 1), paidMonthsCommaSeparated = obj.optString("paidMonthsCommaSeparated"),
-                            isAutoPay = obj.optBoolean("isAutoPay"), paymentMethod = obj.optString("paymentMethod"), notes = obj.optString("notes"),
-                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("bills")) {
+                val arr = root.getJSONArray("bills")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertBill(Bill(
+                        name = obj.getString("name"), amount = obj.getDouble("amount"), category = obj.optString("category", "Mobile"),
+                        dueDayOfMonth = obj.optInt("dueDayOfMonth", 1), paidMonthsCommaSeparated = obj.optString("paidMonthsCommaSeparated"),
+                        isAutoPay = obj.optBoolean("isAutoPay"), paymentMethod = obj.optString("paymentMethod"), notes = obj.optString("notes"),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("events")) {
-                    val arr = root.getJSONArray("events")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertEvent(CalendarEvent(
-                            title = obj.getString("title"), dateString = obj.getString("dateString"),
-                            timeString = obj.optString("timeString", "09:00"), location = obj.optString("location"),
-                            notes = obj.optString("notes"), type = obj.optString("type", "Meeting"),
-                            isAiGenerated = obj.optBoolean("isAiGenerated"), createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                            remindDayBefore = obj.optBoolean("remindDayBefore", true), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("events")) {
+                val arr = root.getJSONArray("events")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertEvent(CalendarEvent(
+                        title = obj.getString("title"), dateString = obj.getString("dateString"),
+                        timeString = obj.optString("timeString", "09:00"), location = obj.optString("location"),
+                        notes = obj.optString("notes"), type = obj.optString("type", "Meeting"),
+                        isAiGenerated = obj.optBoolean("isAiGenerated"), createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        remindDayBefore = obj.optBoolean("remindDayBefore", true), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("diaryEntries")) {
-                    val arr = root.getJSONArray("diaryEntries")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertDiaryEntry(DiaryEntry(
-                            dateString = obj.getString("dateString"), text = obj.getString("text"),
-                            mood = obj.optString("mood", "Neutral"), photoPath = obj.optString("photoPath"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("diaryEntries")) {
+                val arr = root.getJSONArray("diaryEntries")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertDiaryEntry(DiaryEntry(
+                        dateString = obj.getString("dateString"), text = obj.getString("text"),
+                        mood = obj.optString("mood", "Neutral"), photoPath = obj.optString("photoPath"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("notes")) {
-                    val arr = root.getJSONArray("notes")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertNote(QuickNote(
-                            title = obj.getString("title"), content = obj.getString("content"),
-                            isPinned = obj.optBoolean("isPinned"), isFavorite = obj.optBoolean("isFavorite"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), tag = obj.optString("tag", "Notes"),
-                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("notes")) {
+                val arr = root.getJSONArray("notes")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertNote(QuickNote(
+                        title = obj.getString("title"), content = obj.getString("content"),
+                        isPinned = obj.optBoolean("isPinned"), isFavorite = obj.optBoolean("isFavorite"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()), tag = obj.optString("tag", "Notes"),
+                        isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("memories")) {
-                    val arr = root.getJSONArray("memories")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertMemory(PersonalMemory(
-                            content = obj.getString("content"), category = obj.optString("category", "General"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("memories")) {
+                val arr = root.getJSONArray("memories")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertMemory(PersonalMemory(
+                        content = obj.getString("content"), category = obj.optString("category", "General"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("smartReminders")) {
-                    val arr = root.getJSONArray("smartReminders")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertSmartReminder(SmartReminder(
-                            title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
-                            priority = obj.getString("priority"), repeatIntervalMinutes = obj.getInt("repeatIntervalMinutes"),
-                            maxRepeats = obj.getInt("maxRepeats"), currentRepeat = obj.optInt("currentRepeat"),
-                            isAcknowledged = obj.optBoolean("isAcknowledged"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("smartReminders")) {
+                val arr = root.getJSONArray("smartReminders")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertSmartReminder(SmartReminder(
+                        title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
+                        priority = obj.getString("priority"), repeatIntervalMinutes = obj.getInt("repeatIntervalMinutes"),
+                        maxRepeats = obj.getInt("maxRepeats"), currentRepeat = obj.optInt("currentRepeat"),
+                        isAcknowledged = obj.optBoolean("isAcknowledged"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("voiceNotes")) {
-                    val arr = root.getJSONArray("voiceNotes")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertVoiceNote(VoiceNote(
-                            filePath = obj.getString("filePath"), transcription = obj.getString("transcription"),
-                            duration = obj.getLong("duration"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            isTranscribed = obj.optBoolean("isTranscribed"), status = obj.optString("status", "Success"),
-                            category = obj.optString("category", "General"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("voiceNotes")) {
+                val arr = root.getJSONArray("voiceNotes")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertVoiceNote(VoiceNote(
+                        filePath = obj.getString("filePath"), transcription = obj.getString("transcription"),
+                        duration = obj.getLong("duration"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        isTranscribed = obj.optBoolean("isTranscribed"), status = obj.optString("status", "Success"),
+                        category = obj.optString("category", "General"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("goals")) {
-                    val arr = root.getJSONArray("goals")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertGoal(Goal(
-                            title = obj.getString("title"), progress = obj.optInt("progress"),
-                            isDone = obj.optBoolean("isDone"), deadline = obj.optString("deadline"),
-                            createdAt = obj.optString("createdAt"), milestones = obj.optString("milestones"),
-                            isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
-                        ))
-                    }
+            if (root.has("goals")) {
+                val arr = root.getJSONArray("goals")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertGoal(Goal(
+                        title = obj.getString("title"), progress = obj.optInt("progress"),
+                        isDone = obj.optBoolean("isDone"), deadline = obj.optString("deadline"),
+                        createdAt = obj.optString("createdAt"), milestones = obj.optString("milestones"),
+                        isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    ))
                 }
+            }
 
-                if (root.has("recurringReminders")) {
-                    val arr = root.getJSONArray("recurringReminders")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertRecurringReminder(RecurringReminder(
-                            title = obj.getString("title"), type = obj.getString("type"),
-                            time = obj.getString("time"), isActive = obj.optBoolean("isActive", true),
-                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("recurringReminders")) {
+                val arr = root.getJSONArray("recurringReminders")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertRecurringReminder(RecurringReminder(
+                        title = obj.getString("title"), type = obj.getString("type"),
+                        time = obj.getString("time"), isActive = obj.optBoolean("isActive", true),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("remindLinks")) {
-                    val arr = root.getJSONArray("remindLinks")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertRemindLink(RemindLink(
-                            chatId = obj.getLong("chatId"), text = obj.getString("text"),
-                            link = obj.getString("link"), dueDateTime = obj.getString("dueDateTime"),
-                            originalMsgId = obj.optLong("originalMsgId"), isAcknowledged = obj.optBoolean("isAcknowledged"),
-                            createdAt = obj.optString("createdAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("remindLinks")) {
+                val arr = root.getJSONArray("remindLinks")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertRemindLink(RemindLink(
+                        chatId = obj.getLong("chatId"), text = obj.getString("text"),
+                        link = obj.getString("link"), dueDateTime = obj.getString("dueDateTime"),
+                        originalMsgId = obj.optLong("originalMsgId"), isAcknowledged = obj.optBoolean("isAcknowledged"),
+                        createdAt = obj.optString("createdAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
+            }
 
-                if (root.has("privateSpaceItems")) {
-                    val arr = root.getJSONArray("privateSpaceItems")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        repository.insertPrivateSpaceItem(PrivateSpaceItem(
-                            title = obj.getString("title"), content = obj.getString("content"),
-                            category = obj.optString("category", "note"), isPinned = obj.optBoolean("isPinned"),
-                            photoPath = obj.optString("photoPath"), createdAt = obj.optString("createdAt"),
-                            modifiedAt = obj.optString("modifiedAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
-                        ))
-                    }
+            if (root.has("privateSpaceItems")) {
+                val arr = root.getJSONArray("privateSpaceItems")
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    repository.insertPrivateSpaceItem(PrivateSpaceItem(
+                        title = obj.getString("title"), content = cryptoManager.encryptString(obj.getString("content")),
+                        category = obj.optString("category", "note"), isPinned = obj.optBoolean("isPinned"),
+                        photoPath = obj.optString("photoPath"), createdAt = obj.optString("createdAt"),
+                        modifiedAt = obj.optString("modifiedAt"), isDeleted = obj.optBoolean("isDeleted"), remarks = obj.optString("remarks")
+                    ))
                 }
             }
             true
@@ -1813,9 +1800,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun importBackupJson(inputStream: InputStream): Boolean {
+    suspend fun importBackupJson(inputStream: InputStream): Boolean {
         return try {
-            restoreBackup(inputStream.bufferedReader().use { it.readText() })
+            val json = withContext(Dispatchers.IO) { inputStream.bufferedReader().use { it.readText() } }
+            restoreBackup(json)
         } catch (e: Exception) { false }
     }
 
