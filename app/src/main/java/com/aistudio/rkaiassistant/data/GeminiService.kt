@@ -283,36 +283,66 @@ object GeminiService {
 
 
 object GoogleSheetsService {
-    private val okHttpClient by lazy {
+    // Redirect follow manual handle karenge to preserve POST body during region redirects
+    private val client by lazy {
         OkHttpClient.Builder()
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .followRedirects(true)
-            .followSslRedirects(true)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
 
     suspend fun sync(jsonPayload: String, scriptUrl: String): Boolean {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val mediaType = "application/json".toMediaType()
-            val trimmedUrl = scriptUrl.trim()
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonPayload.toRequestBody(mediaType)
+            var currentUrl = scriptUrl.trim()
             
             try {
-                val request = okhttp3.Request.Builder()
-                    .url(trimmedUrl)
-                    .header("User-Agent", "RK-AI-Assistant-Android")
-                    .post(jsonPayload.toRequestBody(mediaType))
-                    .build()
+                var response: okhttp3.Response? = null
+                var redirectCount = 0
+                
+                while (redirectCount < 5) {
+                    val request = okhttp3.Request.Builder()
+                        .url(currentUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .post(requestBody)
+                        .build()
 
-                okHttpClient.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string() ?: ""
-                    val code = response.code
+                    val currentResponse = client.newCall(request).execute()
+                    val code = currentResponse.code
                     
-                    // Apps Script 302 redirects handle hone ke baad code 200 aur "Success" aana chahiye
-                    code == 200 && responseBody.contains("Success", ignoreCase = true)
+                    if (code in listOf(301, 302, 303, 307, 308)) {
+                        val location = currentResponse.header("Location") ?: break
+                        currentUrl = currentResponse.request.url.resolve(location)?.toString() ?: break
+                        currentResponse.close()
+                        redirectCount++
+                        
+                        // Google Apps Script result URL (echo) expects GET
+                        if (currentUrl.contains("googleusercontent.com/macros/echo")) {
+                            val echoRequest = okhttp3.Request.Builder()
+                                .url(currentUrl)
+                                .header("User-Agent", "Mozilla/5.0")
+                                .get()
+                                .build()
+                            response = client.newCall(echoRequest).execute()
+                            break
+                        }
+                        // Region redirect: loop and POST again
+                    } else {
+                        response = currentResponse
+                        break
+                    }
                 }
+
+                response?.use { resp ->
+                    val body = resp.body?.string() ?: ""
+                    resp.code == 200 && (body.contains("Success", ignoreCase = true) || body.contains("OK", ignoreCase = true))
+                } ?: false
+
             } catch (e: Exception) {
                 e.printStackTrace()
                 false

@@ -33,52 +33,24 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
     val expenses by viewModel.expenses.collectAsStateWithLifecycle()
     val diaryEntries by viewModel.diaryEntries.collectAsStateWithLifecycle()
 
-    val scope = rememberCoroutineScope()
-    var aiAdvice by remember { mutableStateOf("Ready to analyze your progress. Click below to receive customized AI review logs & motivation.") }
-    var adviceLoading by remember { mutableStateOf(false) }
-
     // Computations
     val completedTasks = tasks.count { it.isCompleted }
     val pendingTasks = tasks.count { !it.isCompleted }
     val totalTasks = tasks.size
     val taskCompletionRate = if (totalTasks > 0) (completedTasks * 100) / totalTasks else 0
 
-    // Habit completion rate
-    // Count days logged in general, or average streak
     val habitCompTotal = habits.size
     val habitLoggedCount = habits.count { it.loggedDaysCommaSeparated.isNotBlank() }
     val habitCompletionRate = if (habitCompTotal > 0) (habitLoggedCount * 100) / habitCompTotal else 0
 
-    // Total expenses (last 7 days)
     val oneWeekAgo = System.currentTimeMillis() - (7 * 24 * 3600 * 1000L)
     val weeklyUnpaidExpenses = expenses.filter { it.timestamp >= oneWeekAgo && !it.isIncome }
     val totalWeeklyExpense = weeklyUnpaidExpenses.sumOf { it.amount }
 
-    // Category breakdown
     val categorySumMap = weeklyUnpaidExpenses.groupBy { it.category }
         .mapValues { entry -> entry.value.sumOf { it.amount } }
 
     val recentDiaryCount = diaryEntries.count { it.timestamp >= oneWeekAgo }
-
-    fun generateAiWeeklyReviewFeedback() {
-        scope.launch {
-            adviceLoading = true
-            aiAdvice = "Formulating neural performance summaries..."
-            val prompt = """
-                The user has the following weekly statistics:
-                - Tasks Completed vs Pending: $completedTasks completed out of $totalTasks total tasks ($taskCompletionRate% completion rate).
-                - Habits Check-In Rate: $habitCompletionRate% of habits checked-in this week.
-                - Total Expenses: Rs $totalWeeklyExpense
-                - Diary Journal Entries Logged: $recentDiaryCount entries in the last 7 days.
-                
-                Provide a highly motivational, encouraging 2-3 sentence progress report as their personal assistant 'Rk'. Praise their accomplishments or give practical advice for pending items. Be warm, professional, and positive.
-            """.trimIndent()
-            
-            val feedback = GeminiService.chat(prompt = prompt, systemInstruction = "You are RK, a motivational personal AI assistant.")
-            aiAdvice = feedback ?: "I couldn't analyze your stats right now because I'm offline. But from what I see, you're making steady progress! Keep up the good work and I'll give you a detailed report once we're back online."
-            adviceLoading = false
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -106,15 +78,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                         fontSize = 11.sp,
                         color = SoftTextGray
                     )
-                }
-
-                IconButton(
-                    onClick = { generateAiWeeklyReviewFeedback() },
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(NeonCyan.copy(alpha = 0.2f), CircleShape)
-                ) {
-                    Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI Action", tint = NeonCyan)
                 }
             }
 
@@ -146,7 +109,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                         )
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Tasks Widget
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Tasks Status", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -163,7 +125,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                                 Text("$taskCompletionRate% Done", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
 
-                            // Habits Widget
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Habits Logged", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -203,7 +164,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                         )
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Financial widget
                             Column(modifier = Modifier.weight(1.2f)) {
                                 Text("Weekly Expense", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text("Rs $totalWeeklyExpense spent", color = Color(0xFFFFB300), fontSize = 15.sp, fontWeight = FontWeight.Black)
@@ -224,7 +184,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                                 }
                             }
 
-                            // Diary widget
                             Column(modifier = Modifier.weight(0.8f)) {
                                 Text("Diary Logged", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -250,60 +209,6 @@ fun WeeklyReviewScreen(viewModel: AssistantViewModel) {
                                         )
                                     }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // Section 3: AI Assistant review section
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF10121F))
-                            .border(1.dp, NeonCyan.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                            Text(
-                                text = "RK AI ASSISTANT FEEDBACK",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = NeonCyan,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-
-                        Text(
-                            text = aiAdvice,
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        if (!adviceLoading) {
-                            Button(
-                                onClick = { generateAiWeeklyReviewFeedback() },
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().height(36.dp)
-                            ) {
-                                Text("Generate AI Review Summary", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(color = NeonCyan, modifier = Modifier.size(24.dp))
                             }
                         }
                     }

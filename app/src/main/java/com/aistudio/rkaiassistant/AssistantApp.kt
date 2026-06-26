@@ -37,6 +37,13 @@ class AssistantApp : Application() {
 
         // 3. Initialize Google Auth with your Client ID
         com.aistudio.rkaiassistant.data.GoogleAuthHelper.serverClientId = "879298355170-rp7s7vngjg60vhpn6p55cfoi86c1ort2.apps.googleusercontent.com"
+
+        // 4. Schedule background workers (Sync, Backup, Reminders)
+        try {
+            com.aistudio.rkaiassistant.data.scheduleAllWorkers(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule workers", e)
+        }
     }
 
     /**

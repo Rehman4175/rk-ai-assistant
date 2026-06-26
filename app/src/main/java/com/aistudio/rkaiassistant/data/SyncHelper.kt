@@ -218,4 +218,146 @@ object SyncHelper {
             false
         }
     }
+
+    suspend fun generateDriveBackupJson(db: AppDatabase, context: android.content.Context): String {
+        val root = JSONObject()
+        val cryptoManager = CryptoManager()
+        
+        root.put("tasks", JSONArray(db.taskDao().getAllTasksTotal().first().map { t ->
+            JSONObject().apply {
+                put("id", t.id); put("title", t.title); put("isCompleted", t.isCompleted); put("priority", t.priority)
+                put("label", t.label); put("dueDate", t.dueDate); put("notes", t.notes)
+                put("isRepeating", t.isRepeating); put("repeatInterval", t.repeatInterval)
+                put("createdDate", t.createdDate); put("doneDate", t.doneDate)
+                put("isDeleted", t.isDeleted); put("remarks", t.remarks); put("timestamp", t.timestamp)
+            }
+        }))
+        
+        root.put("reminders", JSONArray(db.reminderDao().getFullHistory().first().map { r ->
+            JSONObject().apply {
+                put("id", r.id); put("title", r.title); put("dueDateTime", r.dueDateTime); put("recurrence", r.recurrence)
+                put("isAcknowledged", r.isAcknowledged); put("createdAt", r.createdAt)
+                put("chatId", r.chatId); put("lastFired", r.lastFired); put("remarks", r.remarks)
+                put("isDeleted", r.isDeleted)
+            }
+        }))
+        
+        root.put("expenses", JSONArray(db.expenseDao().getAllExpensesTotal().first().map { e ->
+            JSONObject().apply {
+                put("id", e.id); put("amount", e.amount); put("title", e.title); put("isIncome", e.isIncome)
+                put("category", e.category); put("dateString", e.dateString); put("timestamp", e.timestamp)
+                put("isDeleted", e.isDeleted); put("remarks", e.remarks)
+            }
+        }))
+
+        root.put("habits", JSONArray(db.habitDao().getAllHabits().first().map { h ->
+            JSONObject().apply {
+                put("name", h.name); put("type", h.type); put("emoji", h.emoji)
+                put("loggedDaysCommaSeparated", h.loggedDaysCommaSeparated)
+                put("streakCount", h.streakCount); put("bestStreak", h.bestStreak)
+                put("lastLoggedTimestamp", h.lastLoggedTimestamp); put("targetPerDay", h.targetPerDay)
+                put("isDeleted", h.isDeleted); put("remarks", h.remarks)
+            }
+        }))
+
+        root.put("waterLogs", JSONArray(db.waterLogDao().getAllLogs().first().map { w ->
+            JSONObject().apply {
+                put("mlAmount", w.mlAmount); put("timestamp", w.timestamp)
+                put("dayString", w.dayString); put("isDeleted", w.isDeleted); put("remarks", w.remarks)
+            }
+        }))
+
+        root.put("bills", JSONArray(db.billDao().getAllBills().first().map { b ->
+            JSONObject().apply {
+                put("name", b.name); put("amount", b.amount); put("category", b.category)
+                put("dueDayOfMonth", b.dueDayOfMonth); put("paidMonthsCommaSeparated", b.paidMonthsCommaSeparated)
+                put("isAutoPay", b.isAutoPay); put("paymentMethod", b.paymentMethod); put("notes", b.notes)
+                put("createdAt", b.createdAt); put("isDeleted", b.isDeleted); put("remarks", b.remarks)
+            }
+        }))
+
+        root.put("events", JSONArray(db.calendarEventDao().getAllEvents().first().map { v ->
+            JSONObject().apply {
+                put("title", v.title); put("dateString", v.dateString); put("timeString", v.timeString)
+                put("location", v.location); put("notes", v.notes); put("type", v.type)
+                put("isAiGenerated", v.isAiGenerated); put("createdAt", v.createdAt)
+                put("remindDayBefore", v.remindDayBefore); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
+            }
+        }))
+
+        root.put("diaryEntries", JSONArray(db.diaryEntryDao().getAllDiaryEntries().first().map { d ->
+            JSONObject().apply {
+                put("dateString", d.dateString); put("text", d.text); put("mood", d.mood)
+                put("photoPath", d.photoPath); put("timestamp", d.timestamp); put("isDeleted", d.isDeleted)
+                put("remarks", d.remarks)
+            }
+        }))
+
+        root.put("notes", JSONArray(db.quickNoteDao().getAllNotes().first().map { n ->
+            JSONObject().apply {
+                put("title", n.title); put("content", n.content); put("isPinned", n.isPinned)
+                put("isFavorite", n.isFavorite); put("timestamp", n.timestamp); put("tag", n.tag)
+                put("isDeleted", n.isDeleted); put("remarks", n.remarks)
+            }
+        }))
+
+        root.put("memories", JSONArray(db.personalMemoryDao().getAllMemories().first().map { m ->
+            JSONObject().apply {
+                put("content", m.content); put("category", m.category); put("timestamp", m.timestamp)
+                put("isDeleted", m.isDeleted); put("remarks", m.remarks)
+            }
+        }))
+
+        root.put("smartReminders", JSONArray(db.smartReminderDao().getAll().first().map { s ->
+            JSONObject().apply {
+                put("title", s.title); put("dueDateTime", s.dueDateTime); put("priority", s.priority)
+                put("repeatIntervalMinutes", s.repeatIntervalMinutes); put("maxRepeats", s.maxRepeats)
+                put("currentRepeat", s.currentRepeat); put("isAcknowledged", s.isAcknowledged)
+                put("isDeleted", s.isDeleted); put("remarks", s.remarks)
+            }
+        }))
+
+        root.put("voiceNotes", JSONArray(db.voiceNoteDao().getAllVoiceNotes().first().map { v ->
+            JSONObject().apply {
+                put("filePath", v.filePath); put("transcription", v.transcription); put("duration", v.duration)
+                put("timestamp", v.timestamp); put("isTranscribed", v.isTranscribed); put("status", v.status)
+                put("category", v.category); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
+            }
+        }))
+
+        root.put("goals", JSONArray(db.goalDao().getAllGoals().first().map { g ->
+            JSONObject().apply {
+                put("title", g.title); put("progress", g.progress); put("isDone", g.isDone)
+                put("deadline", g.deadline); put("createdAt", g.createdAt); put("milestones", g.milestones)
+                put("isDeleted", g.isDeleted); put("remarks", g.remarks); put("timestamp", g.timestamp)
+            }
+        }))
+
+        root.put("recurringReminders", JSONArray(db.recurringReminderDao().getAll().first().map { r ->
+            JSONObject().apply {
+                put("title", r.title); put("type", r.type); put("time", r.time)
+                put("isActive", r.isActive); put("createdAt", r.createdAt); put("isDeleted", r.isDeleted)
+                put("remarks", r.remarks)
+            }
+        }))
+
+        root.put("remindLinks", JSONArray(db.remindLinkDao().getAllLinks().first().map { l ->
+            JSONObject().apply {
+                put("chatId", l.chatId); put("text", l.text); put("link", l.link)
+                put("dueDateTime", l.dueDateTime); put("originalMsgId", l.originalMsgId)
+                put("isAcknowledged", l.isAcknowledged); put("createdAt", l.createdAt)
+                put("isDeleted", l.isDeleted); put("remarks", l.remarks)
+            }
+        }))
+
+        root.put("privateSpaceItems", JSONArray(db.privateSpaceItemDao().getAllItems().first().map { p ->
+            JSONObject().apply {
+                put("title", p.title); put("content", cryptoManager.decryptString(p.content)); put("category", p.category)
+                put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
+                put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
+            }
+        }))
+
+        return root.toString(2)
+    }
 }

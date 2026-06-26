@@ -106,12 +106,6 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                val totalXp = habitsList.sumOf { 
-                                    val count = it.loggedDaysCommaSeparated.split(",").count { d -> d.isNotBlank() }
-                                    (count * 10) + (it.streakCount * 50)
-                                }
-                                val userLevel = (totalXp / 1000) + 1
-                                
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "WELCOME BACK RK",
@@ -120,20 +114,6 @@ fun DashboardScreen(
                                         fontSize = 22.sp,
                                         letterSpacing = 1.sp
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Surface(
-                                        color = NeonCyan.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(4.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan)
-                                    ) {
-                                        Text(
-                                            text = "LVL $userLevel",
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = NeonCyan
-                                        )
-                                    }
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(

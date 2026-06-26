@@ -51,6 +51,16 @@ fun scheduleAllWorkers(context: Context) {
         ExistingPeriodicWorkPolicy.KEEP,
         syncRequest
     )
+
+    // 7. Periodic Drive Backup Worker (Every 2 hours)
+    val driveRequest = PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(2, TimeUnit.HOURS)
+        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        .build()
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        "PeriodicDriveBackupWorker",
+        ExistingPeriodicWorkPolicy.KEEP,
+        driveRequest
+    )
 }
 
 fun scheduleRecurringCheck(context: Context) {
@@ -235,7 +245,37 @@ class GoogleSheetSyncWorker(val context: Context, workerParams: WorkerParameters
         val db = AppDatabase.getDatabase(context)
         val success = SyncHelper.performSync(db, scriptUrl)
         
-        return if (success) Result.success() else Result.retry()
+        val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+        if (success) {
+            prefs.saveLastSyncStatus("✅ Auto-Sync Successful! ($time)")
+            return Result.success()
+        } else {
+            prefs.saveLastSyncStatus("❌ Auto-Sync Failed. ($time)")
+            return Result.retry()
+        }
+    }
+}
+
+// WORKER: Google Drive Backup Worker
+class GoogleDriveBackupWorker(val context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+    override suspend fun doWork(): Result {
+        val prefs = SecurePrefHelper(context)
+        return try {
+            val db = AppDatabase.getDatabase(context)
+            val json = SyncHelper.generateDriveBackupJson(db, context)
+            val success = GoogleDriveService.uploadBackup(context, json)
+            val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+            if (success) {
+                prefs.saveLastDriveBackupStatus("✅ Auto-Backup Successful! ($time)")
+                Result.success()
+            } else {
+                prefs.saveLastDriveBackupStatus("❌ Auto-Backup Failed. ($time)")
+                Result.retry()
+            }
+        } catch (e: Exception) {
+            prefs.saveLastDriveBackupStatus("❌ Error: ${e.localizedMessage}")
+            Result.retry()
+        }
     }
 }
 

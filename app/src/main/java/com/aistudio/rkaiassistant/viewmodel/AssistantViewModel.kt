@@ -14,6 +14,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.*
 import android.net.NetworkRequest
 import android.widget.Toast
 import com.aistudio.rkaiassistant.data.*
@@ -116,6 +117,21 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     // State Flows for DB Data - Using lazy initialization for repository
     val tasks: StateFlow<List<Task>> by lazy { repository.allTasks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
     val reminders: StateFlow<List<Reminder>> by lazy { repository.allReminders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
+    
+    // Total flows for History (including deleted)
+    val allTasksTotal: StateFlow<List<Task>> by lazy { 
+        db.taskDao().getAllTasksTotal()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) 
+    }
+    val allRemindersTotal: StateFlow<List<Reminder>> by lazy { 
+        db.reminderDao().getFullHistory()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) 
+    }
+    val allExpensesTotal: StateFlow<List<Expense>> by lazy { 
+        db.expenseDao().getAllExpensesTotal()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) 
+    }
+
     val habits: StateFlow<List<Habit>> by lazy { repository.allHabits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
     val expenses: StateFlow<List<Expense>> by lazy { repository.allExpenses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
     val bills: StateFlow<List<Bill>> by lazy { repository.allBills.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()) }
@@ -145,14 +161,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     val allActivities: StateFlow<List<ActivityItem>> by lazy {
         combine(
-            combine(tasks, reminders, habits, expenses, bills) { t, r, h, e, b ->
+            combine(allTasksTotal, allRemindersTotal, habits, allExpensesTotal, bills) { t, r, h, e, b ->
                 val list = mutableListOf<ActivityItem>()
                 val todayMonth = getTodayDateString().take(7)
-                t.forEach { list.add(ActivityItem("${it.id}#", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) }
-                r.forEach { list.add(ActivityItem("${it.id}#", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
-                h.forEach { list.add(ActivityItem("${it.id}#", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
-                e.forEach { list.add(ActivityItem("${it.id}#", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
-                b.forEach { list.add(ActivityItem("${it.id}#", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
+                t.forEach { list.add(ActivityItem("#${it.id}", "TASK", it.title, it.createdDate, it.isDeleted, it.isCompleted, it.timestamp)) }
+                r.forEach { list.add(ActivityItem("#${it.id}", "REMINDER", it.title, SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(it.dueDateTime)), it.isDeleted, it.isAcknowledged, it.createdAt)) }
+                h.forEach { list.add(ActivityItem("#${it.id}", "HABIT", it.name, "", it.isDeleted, it.streakCount > 0, it.lastLoggedTimestamp)) }
+                e.forEach { list.add(ActivityItem("#${it.id}", "EXPENSE", "${it.title} (₹${it.amount})", it.dateString, it.isDeleted, true, it.timestamp)) }
+                b.forEach { list.add(ActivityItem("#${it.id}", "BILL", "${it.name} (₹${it.amount})", "", it.isDeleted, it.paidMonthsCommaSeparated.contains(todayMonth), it.createdAt)) }
                 list
             },
             combine(events, diaryEntries, notes, memories, smartReminders) { ev, d, n, m, s ->
@@ -244,6 +260,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val isLoginSkipped = MutableStateFlow(false)
 
     val isLocalAiAvailable = MutableStateFlow(false)
+    val localAiError = MutableStateFlow<String?>(null)
     val isImportingModel = MutableStateFlow(false)
     val modelDownloadProgress = MutableStateFlow<Float?>(null)
 
@@ -274,20 +291,43 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Google Sheets Sync State
     val isSyncing = MutableStateFlow(false)
-    val lastSyncStatus = MutableStateFlow<String?>(null)
+    val lastSyncStatus = MutableStateFlow(prefs.getLastSyncStatus())
+    
+    // Google Drive Backup State
+    val isDriveBackingUp = MutableStateFlow(false)
+    val lastDriveBackupStatus = MutableStateFlow(prefs.getLastDriveBackupStatus())
 
     // TTS
     private var tts: TextToSpeech? = null
 
     init {
+        // Poll for background sync status updates
+        viewModelScope.launch {
+            while (true) {
+                delay(5000)
+                val sStatus = prefs.getLastSyncStatus()
+                if (lastSyncStatus.value != sStatus && !isSyncing.value) {
+                    lastSyncStatus.value = sStatus
+                }
+                val dStatus = prefs.getLastDriveBackupStatus()
+                if (lastDriveBackupStatus.value != dStatus && !isDriveBackingUp.value) {
+                    lastDriveBackupStatus.value = dStatus
+                }
+            }
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 LocalLLMService.initialize(application)
                 withContext(Dispatchers.Main) {
-                    isLocalAiAvailable.value = LocalLLMService.isModelAvailable(application)
+                    isLocalAiAvailable.value = LocalLLMService.isEngineReady()
+                    localAiError.value = LocalLLMService.getLastError()
                 }
             } catch (t: Throwable) {
                 android.util.Log.e("RKAI", "Local AI Init Error", t)
+                withContext(Dispatchers.Main) {
+                    localAiError.value = t.localizedMessage
+                }
             }
         }
 
@@ -349,9 +389,31 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun triggerImmediateSync() {
-        val url = prefs.getGoogleScriptUrl()
-        if (url.isNotBlank() && isNetworkAvailable()) {
-            syncToGoogleSheets(url)
+        val context = getApplication<Application>()
+        
+        // 1. Google Sheets Sync
+        val sheetUrl = prefs.getGoogleScriptUrl()
+        if (sheetUrl.isNotBlank()) {
+            val syncRequest = OneTimeWorkRequestBuilder<GoogleSheetSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "ImmediateSheetSync",
+                ExistingWorkPolicy.REPLACE,
+                syncRequest
+            )
+        }
+
+        // 2. Google Drive Backup
+        if (GoogleSignIn.getLastSignedInAccount(context) != null) {
+            val driveRequest = OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "ImmediateDriveBackup",
+                ExistingWorkPolicy.REPLACE,
+                driveRequest
+            )
         }
     }
 
@@ -624,11 +686,33 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 return@launch
             }
-            val json = getFullBackupJson()
-            val success = GoogleDriveService.uploadBackup(context, json)
-            withContext(Dispatchers.Main) {
-                if (success) Toast.makeText(context, "Backup saved to Google Drive!", Toast.LENGTH_SHORT).show()
-                else Toast.makeText(context, "Drive Backup failed!", Toast.LENGTH_SHORT).show()
+            
+            isDriveBackingUp.value = true
+            lastDriveBackupStatus.value = "Backing up to Drive..."
+            
+            try {
+                val json = getFullBackupJson()
+                val success = GoogleDriveService.uploadBackup(context, json)
+                val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+                withContext(Dispatchers.Main) {
+                    if (success) {
+                        val status = "✅ Backup Successful! ($time)"
+                        lastDriveBackupStatus.value = status
+                        prefs.saveLastDriveBackupStatus(status)
+                        Toast.makeText(context, "Backup saved to Google Drive!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val status = "❌ Drive Backup failed!"
+                        lastDriveBackupStatus.value = status
+                        prefs.saveLastDriveBackupStatus(status)
+                        Toast.makeText(context, "Drive Backup failed!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                val status = "❌ Error: ${e.localizedMessage}"
+                lastDriveBackupStatus.value = status
+                prefs.saveLastDriveBackupStatus(status)
+            } finally {
+                isDriveBackingUp.value = false
             }
         }
     }
@@ -724,11 +808,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 isCompleted = isCompleting,
                 doneDate = if (isCompleting) getTodayDateString() else ""
             ))
+            triggerImmediateSync()
         }
     }
 
     fun deleteTask(task: Task) {
-        viewModelScope.launch { repository.deleteTask(task) }
+        viewModelScope.launch { 
+            repository.updateTask(task.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Reminder Actions ---
@@ -793,16 +881,25 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun deleteReminder(reminder: Reminder) {
-        viewModelScope.launch { repository.deleteReminder(reminder) }
+        viewModelScope.launch { 
+            repository.updateReminder(reminder.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     fun acknowledgeReminder(reminder: Reminder) {
-        viewModelScope.launch { repository.updateReminder(reminder.copy(isAcknowledged = true)) }
+        viewModelScope.launch { 
+            repository.updateReminder(reminder.copy(isAcknowledged = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Habit Actions ---
     fun addHabit(name: String, type: String, emoji: String = "✅", targetPerDay: String = "") {
-        viewModelScope.launch { repository.insertHabit(Habit(name = name, type = type, emoji = emoji, targetPerDay = targetPerDay)) }
+        viewModelScope.launch { 
+            repository.insertHabit(Habit(name = name, type = type, emoji = emoji, targetPerDay = targetPerDay))
+            triggerImmediateSync()
+        }
     }
 
     fun logHabitToday(habit: Habit) {
@@ -817,23 +914,34 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     streakCount = newStreak,
                     lastLoggedTimestamp = System.currentTimeMillis()
                 ))
+                triggerImmediateSync()
             }
         }
     }
 
     fun deleteHabit(habit: Habit) {
-        viewModelScope.launch { repository.deleteHabit(habit) }
+        viewModelScope.launch { 
+            repository.updateHabit(habit.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Water ---
     fun logWater(ml: Int) {
         viewModelScope.launch {
             repository.insertWaterLog(WaterLog(mlAmount = ml, dayString = getTodayDateString()))
+            triggerImmediateSync()
         }
     }
 
     fun deleteWaterLog(id: Int) {
-        viewModelScope.launch { repository.deleteWaterLogById(id) }
+        viewModelScope.launch { 
+            val log = waterLogs.value.find { it.id == id }
+            if (log != null) {
+                repository.updateWaterLog(log.copy(isDeleted = true))
+                triggerImmediateSync()
+            }
+        }
     }
 
     // --- Expense ---
@@ -845,7 +953,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun deleteExpense(expense: Expense) {
-        viewModelScope.launch { repository.deleteExpense(expense) }
+        viewModelScope.launch { 
+            repository.updateExpense(expense.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Bills ---
@@ -855,6 +966,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 name = name, amount = amount, category = category,
                 dueDayOfMonth = dueDay, paymentMethod = paymentMethod, notes = notes
             ))
+            triggerImmediateSync()
         }
     }
 
@@ -865,12 +977,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             if (!existing.contains(currentMonth)) {
                 val updated = (existing + currentMonth).joinToString(",")
                 repository.updateBill(bill.copy(paidMonthsCommaSeparated = updated))
+                triggerImmediateSync()
             }
         }
     }
 
     fun deleteBill(bill: Bill) {
-        viewModelScope.launch { repository.deleteBill(bill) }
+        viewModelScope.launch { 
+            repository.updateBill(bill.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Calendar Events ---
@@ -880,11 +996,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 title = title, dateString = dateString, timeString = timeString,
                 location = location, notes = notes, type = type, remindDayBefore = remindDayBefore
             ))
+            triggerImmediateSync()
         }
     }
 
     fun deleteCalendarEvent(event: CalendarEvent) {
-        viewModelScope.launch { repository.deleteEvent(event) }
+        viewModelScope.launch { 
+            repository.updateEvent(event.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Diary ---
@@ -901,33 +1021,54 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun deleteDiaryEntry(entry: DiaryEntry) {
-        viewModelScope.launch { repository.deleteDiaryEntry(entry) }
+        viewModelScope.launch { 
+            repository.updateDiaryEntry(entry.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Notes ---
     fun addNote(title: String, content: String, tag: String) {
-        viewModelScope.launch { repository.insertNote(QuickNote(title = title, content = content, tag = tag)) }
+        viewModelScope.launch { 
+            repository.insertNote(QuickNote(title = title, content = content, tag = tag))
+            triggerImmediateSync()
+        }
     }
 
     fun toggleNotePin(note: QuickNote) {
-        viewModelScope.launch { repository.updateNote(note.copy(isPinned = !note.isPinned)) }
+        viewModelScope.launch { 
+            repository.updateNote(note.copy(isPinned = !note.isPinned))
+            triggerImmediateSync()
+        }
     }
 
     fun toggleNoteFavorite(note: QuickNote) {
-        viewModelScope.launch { repository.updateNote(note.copy(isFavorite = !note.isFavorite)) }
+        viewModelScope.launch { 
+            repository.updateNote(note.copy(isFavorite = !note.isFavorite))
+            triggerImmediateSync()
+        }
     }
 
     fun deleteNote(note: QuickNote) {
-        viewModelScope.launch { repository.deleteNote(note) }
+        viewModelScope.launch { 
+            repository.updateNote(note.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Memories ---
     fun addMemory(content: String, category: String) {
-        viewModelScope.launch { repository.insertMemory(PersonalMemory(content = content, category = category)) }
+        viewModelScope.launch { 
+            repository.insertMemory(PersonalMemory(content = content, category = category))
+            triggerImmediateSync()
+        }
     }
 
     fun deleteMemory(memory: PersonalMemory) {
-        viewModelScope.launch { repository.deleteMemory(memory) }
+        viewModelScope.launch { 
+            repository.updateMemory(memory.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     fun clearChatHistory() {
@@ -1417,147 +1558,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     // --- Backups ---
     private suspend fun getFullBackupJson(): String {
-        val root = JSONObject()
-        
-        // Collect all data directly from repository (Flow.first() ensures a fresh DB read)
-        root.put("tasks", JSONArray(repository.allTasks.first().map { t ->
-            JSONObject().apply {
-                put("title", t.title); put("isCompleted", t.isCompleted); put("priority", t.priority)
-                put("label", t.label); put("dueDate", t.dueDate); put("notes", t.notes)
-                put("isRepeating", t.isRepeating); put("repeatInterval", t.repeatInterval)
-                put("createdDate", t.createdDate); put("doneDate", t.doneDate)
-                put("isDeleted", t.isDeleted); put("remarks", t.remarks); put("timestamp", t.timestamp)
-            }
-        }))
-        
-        root.put("reminders", JSONArray(repository.allReminders.first().map { r ->
-            JSONObject().apply {
-                put("title", r.title); put("dueDateTime", r.dueDateTime); put("recurrence", r.recurrence)
-                put("isAcknowledged", r.isAcknowledged); put("createdAt", r.createdAt)
-                put("chatId", r.chatId); put("lastFired", r.lastFired); put("remarks", r.remarks)
-                put("isDeleted", r.isDeleted)
-            }
-        }))
-        
-        root.put("expenses", JSONArray(repository.allExpenses.first().map { e ->
-            JSONObject().apply {
-                put("amount", e.amount); put("title", e.title); put("isIncome", e.isIncome)
-                put("category", e.category); put("dateString", e.dateString); put("timestamp", e.timestamp)
-                put("isDeleted", e.isDeleted); put("remarks", e.remarks)
-            }
-        }))
-
-        root.put("habits", JSONArray(repository.allHabits.first().map { h ->
-            JSONObject().apply {
-                put("name", h.name); put("type", h.type); put("emoji", h.emoji)
-                put("loggedDaysCommaSeparated", h.loggedDaysCommaSeparated)
-                put("streakCount", h.streakCount); put("bestStreak", h.bestStreak)
-                put("lastLoggedTimestamp", h.lastLoggedTimestamp); put("targetPerDay", h.targetPerDay)
-                put("isDeleted", h.isDeleted); put("remarks", h.remarks)
-            }
-        }))
-
-        // Use all water logs for full backup
-        root.put("waterLogs", JSONArray(db.waterLogDao().getAllLogs().first().map { w ->
-            JSONObject().apply {
-                put("mlAmount", w.mlAmount); put("timestamp", w.timestamp)
-                put("dayString", w.dayString); put("isDeleted", w.isDeleted); put("remarks", w.remarks)
-            }
-        }))
-
-        root.put("bills", JSONArray(repository.allBills.first().map { b ->
-            JSONObject().apply {
-                put("name", b.name); put("amount", b.amount); put("category", b.category)
-                put("dueDayOfMonth", b.dueDayOfMonth); put("paidMonthsCommaSeparated", b.paidMonthsCommaSeparated)
-                put("isAutoPay", b.isAutoPay); put("paymentMethod", b.paymentMethod); put("notes", b.notes)
-                put("createdAt", b.createdAt); put("isDeleted", b.isDeleted); put("remarks", b.remarks)
-            }
-        }))
-
-        root.put("events", JSONArray(repository.allEvents.first().map { v ->
-            JSONObject().apply {
-                put("title", v.title); put("dateString", v.dateString); put("timeString", v.timeString)
-                put("location", v.location); put("notes", v.notes); put("type", v.type)
-                put("isAiGenerated", v.isAiGenerated); put("createdAt", v.createdAt)
-                put("remindDayBefore", v.remindDayBefore); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
-            }
-        }))
-
-        root.put("diaryEntries", JSONArray(repository.allDiaryEntries.first().map { d ->
-            JSONObject().apply {
-                put("dateString", d.dateString); put("text", d.text); put("mood", d.mood)
-                put("photoPath", d.photoPath); put("timestamp", d.timestamp); put("isDeleted", d.isDeleted)
-                put("remarks", d.remarks)
-            }
-        }))
-
-        root.put("notes", JSONArray(repository.allNotes.first().map { n ->
-            JSONObject().apply {
-                put("title", n.title); put("content", n.content); put("isPinned", n.isPinned)
-                put("isFavorite", n.isFavorite); put("timestamp", n.timestamp); put("tag", n.tag)
-                put("isDeleted", n.isDeleted); put("remarks", n.remarks)
-            }
-        }))
-
-        root.put("memories", JSONArray(repository.allMemories.first().map { m ->
-            JSONObject().apply {
-                put("content", m.content); put("category", m.category); put("timestamp", m.timestamp)
-                put("isDeleted", m.isDeleted); put("remarks", m.remarks)
-            }
-        }))
-
-        // Use all smart reminders
-        root.put("smartReminders", JSONArray(db.smartReminderDao().getAll().first().map { s ->
-            JSONObject().apply {
-                put("title", s.title); put("dueDateTime", s.dueDateTime); put("priority", s.priority)
-                put("repeatIntervalMinutes", s.repeatIntervalMinutes); put("maxRepeats", s.maxRepeats)
-                put("currentRepeat", s.currentRepeat); put("isAcknowledged", s.isAcknowledged)
-                put("isDeleted", s.isDeleted); put("remarks", s.remarks)
-            }
-        }))
-
-        root.put("voiceNotes", JSONArray(repository.allVoiceNotes.first().map { v ->
-            JSONObject().apply {
-                put("filePath", v.filePath); put("transcription", v.transcription); put("duration", v.duration)
-                put("timestamp", v.timestamp); put("isTranscribed", v.isTranscribed); put("status", v.status)
-                put("category", v.category); put("isDeleted", v.isDeleted); put("remarks", v.remarks)
-            }
-        }))
-
-        root.put("goals", JSONArray(repository.allGoals.first().map { g ->
-            JSONObject().apply {
-                put("title", g.title); put("progress", g.progress); put("isDone", g.isDone)
-                put("deadline", g.deadline); put("createdAt", g.createdAt); put("milestones", g.milestones)
-                put("isDeleted", g.isDeleted); put("remarks", g.remarks); put("timestamp", g.timestamp)
-            }
-        }))
-
-        root.put("recurringReminders", JSONArray(repository.allRecurringReminders.first().map { r ->
-            JSONObject().apply {
-                put("title", r.title); put("type", r.type); put("time", r.time)
-                put("isActive", r.isActive); put("createdAt", r.createdAt); put("isDeleted", r.isDeleted)
-                put("remarks", r.remarks)
-            }
-        }))
-
-        root.put("remindLinks", JSONArray(repository.allRemindLinks.first().map { l ->
-            JSONObject().apply {
-                put("chatId", l.chatId); put("text", l.text); put("link", l.link)
-                put("dueDateTime", l.dueDateTime); put("originalMsgId", l.originalMsgId)
-                put("isAcknowledged", l.isAcknowledged); put("createdAt", l.createdAt)
-                put("isDeleted", l.isDeleted); put("remarks", l.remarks)
-            }
-        }))
-
-        root.put("privateSpaceItems", JSONArray(repository.allPrivateSpaceItems.first().map { p ->
-            JSONObject().apply {
-                put("title", p.title); put("content", cryptoManager.decryptString(p.content)); put("category", p.category)
-                put("isPinned", p.isPinned); put("photoPath", p.photoPath); put("createdAt", p.createdAt)
-                put("modifiedAt", p.modifiedAt); put("isDeleted", p.isDeleted); put("remarks", p.remarks)
-            }
-        }))
-
-        return root.toString(2)
+        return SyncHelper.generateDriveBackupJson(db, getApplication())
     }
 
     fun generateBackup() {
@@ -1581,6 +1582,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
                     repository.insertTask(Task(
+                        id = obj.optInt("id", 0),
                         title = obj.getString("title"), isCompleted = obj.optBoolean("isCompleted"),
                         priority = obj.optString("priority", "Medium"), label = obj.optString("label", "General"),
                         dueDate = obj.optString("dueDate"), notes = obj.optString("notes"),
@@ -1597,6 +1599,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
                     repository.insertReminder(Reminder(
+                        id = obj.optInt("id", 0),
                         title = obj.getString("title"), dueDateTime = obj.getLong("dueDateTime"),
                         recurrence = obj.optString("recurrence", "None"), isAcknowledged = obj.optBoolean("isAcknowledged"),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()), chatId = obj.optString("chatId"),
@@ -1610,6 +1613,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
                     repository.insertExpense(Expense(
+                        id = obj.optInt("id", 0),
                         amount = obj.getDouble("amount"), title = obj.getString("title"),
                         isIncome = obj.optBoolean("isIncome"), category = obj.optString("category", "Food"),
                         dateString = obj.getString("dateString"), timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
@@ -1822,25 +1826,31 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun completeSmartReminder(reminder: SmartReminder) {
-        viewModelScope.launch { repository.updateSmartReminder(reminder.copy(isAcknowledged = true)) }
+        viewModelScope.launch { 
+            repository.updateSmartReminder(reminder.copy(isAcknowledged = true))
+            triggerImmediateSync()
+        }
     }
 
     fun deleteSmartReminder(reminder: SmartReminder) {
-        viewModelScope.launch { repository.deleteSmartReminder(reminder) }
+        viewModelScope.launch { 
+            repository.updateSmartReminder(reminder.copy(isDeleted = true))
+            triggerImmediateSync()
+        }
     }
 
     // --- Voice Notes ---
     fun addVoiceNote(filePath: String, duration: Long, category: String = "General") {
         viewModelScope.launch {
             repository.insertVoiceNote(VoiceNote(filePath = filePath, transcription = "Not Transcribed Yet", duration = duration, category = category))
+            triggerImmediateSync()
         }
     }
 
     fun deleteVoiceNote(voiceNote: VoiceNote) {
         viewModelScope.launch {
-            val file = java.io.File(voiceNote.filePath)
-            if (file.exists()) file.delete()
-            repository.deleteVoiceNote(voiceNote)
+            repository.updateVoiceNote(voiceNote.copy(isDeleted = true))
+            triggerImmediateSync()
         }
     }
 
@@ -1880,28 +1890,37 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun addGoal(title: String, deadline: String) {
         viewModelScope.launch {
             repository.insertGoal(Goal(title = title, deadline = deadline, createdAt = getTodayDateString()))
+            triggerImmediateSync()
         }
     }
 
     fun updateGoalProgress(goal: Goal, progress: Int) {
         viewModelScope.launch {
             repository.updateGoal(goal.copy(progress = progress, isDone = progress >= 100))
+            triggerImmediateSync()
         }
     }
 
     fun deleteGoal(goal: Goal) {
-        viewModelScope.launch { repository.deleteGoal(goal) }
+        viewModelScope.launch { 
+            repository.deleteGoal(goal)
+            triggerImmediateSync()
+        }
     }
 
     // --- Recurring Reminder Actions ---
     fun addRecurringReminder(title: String, type: String, time: String) {
         viewModelScope.launch {
             repository.insertRecurringReminder(RecurringReminder(title = title, type = type, time = time))
+            triggerImmediateSync()
         }
     }
 
     fun deleteRecurringReminder(reminder: RecurringReminder) {
-        viewModelScope.launch { repository.deleteRecurringReminder(reminder) }
+        viewModelScope.launch { 
+            repository.deleteRecurringReminder(reminder)
+            triggerImmediateSync()
+        }
     }
 
     // --- Remind Link Actions ---
@@ -1912,15 +1931,22 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 dueDateTime = dueDateTime, originalMsgId = originalMsgId,
                 createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
             ))
+            triggerImmediateSync()
         }
     }
 
     fun acknowledgeRemindLink(link: RemindLink) {
-        viewModelScope.launch { repository.updateRemindLink(link.copy(isAcknowledged = true)) }
+        viewModelScope.launch { 
+            repository.updateRemindLink(link.copy(isAcknowledged = true))
+            triggerImmediateSync()
+        }
     }
 
     fun deleteRemindLink(link: RemindLink) {
-        viewModelScope.launch { repository.deleteRemindLink(link) }
+        viewModelScope.launch { 
+            repository.deleteRemindLink(link)
+            triggerImmediateSync()
+        }
     }
 
     // --- Private Space Actions ---
@@ -1932,6 +1958,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 photoPath = photoPath,
                 createdAt = now, modifiedAt = now
             ))
+            triggerImmediateSync()
         }
     }
 
@@ -1943,17 +1970,22 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 content = cryptoManager.encryptString(item.content),
                 modifiedAt = now
             ))
+            triggerImmediateSync()
         }
     }
 
     fun togglePrivateSpaceItemPin(item: PrivateSpaceItem) {
         viewModelScope.launch {
             repository.updatePrivateSpaceItem(item.copy(isPinned = !item.isPinned))
+            triggerImmediateSync()
         }
     }
 
     fun deletePrivateSpaceItem(item: PrivateSpaceItem) {
-        viewModelScope.launch { repository.deletePrivateSpaceItem(item) }
+        viewModelScope.launch { 
+            repository.deletePrivateSpaceItem(item)
+            triggerImmediateSync()
+        }
     }
 
 
@@ -1962,12 +1994,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     fun syncToGoogleSheets(scriptUrl: String) {
         // Security Fix: Whitelist script.google.com
         if (!scriptUrl.contains("script.google.com")) {
-            lastSyncStatus.value = "Error: Invalid URL. Only script.google.com is allowed."
+            val err = "Error: Invalid URL. Only script.google.com is allowed."
+            lastSyncStatus.value = err
+            prefs.saveLastSyncStatus(err)
             return
         }
 
         if (scriptUrl.isBlank()) {
-            lastSyncStatus.value = "Error: Google Script URL is missing."
+            val err = "Error: Google Script URL is missing."
+            lastSyncStatus.value = err
+            prefs.saveLastSyncStatus(err)
             return
         }
 
@@ -1977,13 +2013,20 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
             try {
                 val success = SyncHelper.performSync(db, scriptUrl)
+                val time = SimpleDateFormat("HH:mm", Locale.US).format(Date())
                 if (success) {
-                    lastSyncStatus.value = "✅ Sync Successful! (${SimpleDateFormat("HH:mm", Locale.US).format(Date())})"
+                    val status = "✅ Sync Successful! ($time)"
+                    lastSyncStatus.value = status
+                    prefs.saveLastSyncStatus(status)
                 } else {
-                    lastSyncStatus.value = "❌ Sync Failed. Check script doPost(e) & URL."
+                    val status = "❌ Sync Failed. Check script doPost(e) & URL."
+                    lastSyncStatus.value = status
+                    prefs.saveLastSyncStatus(status)
                 }
             } catch (e: Exception) {
-                lastSyncStatus.value = "❌ Error: ${e.localizedMessage}"
+                val status = "❌ Error: ${e.localizedMessage}"
+                lastSyncStatus.value = status
+                prefs.saveLastSyncStatus(status)
             } finally {
                 isSyncing.value = false
             }
@@ -1992,36 +2035,108 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun deleteModel() {
         val context = getApplication<Application>()
-        val file = java.io.File(context.getExternalFilesDir(null), LocalLLMService.MODEL_PATH)
-        if (file.exists()) {
-            file.delete()
+        
+        // Comprehensive cleanup of ALL potential AI files to free up space
+        val externalFilesDir = context.getExternalFilesDir(null)
+        val internalFilesDir = context.filesDir
+        
+        fun cleanupFolder(dir: java.io.File?) {
+            dir?.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".bin") || file.name.endsWith(".litertlm") || file.name.contains("model")) {
+                    android.util.Log.d("RKAI", "Cleaning up: ${file.absolutePath}")
+                    file.delete()
+                }
+            }
         }
+
+        cleanupFolder(externalFilesDir)
+        cleanupFolder(internalFilesDir)
+
         LocalLLMService.reset()
         isLocalAiAvailable.value = false
-        Toast.makeText(context, "Model deleted.", Toast.LENGTH_SHORT).show()
+        lastSyncStatus.value = "All AI models and large cache files cleared."
+        Toast.makeText(context, "Storage cleared! All model files removed.", Toast.LENGTH_SHORT).show()
     }
 
     fun importModelFromFile(inputStream: InputStream) {
         viewModelScope.launch(Dispatchers.IO) {
             isImportingModel.value = true
+            modelDownloadProgress.value = 0f
+            localAiError.value = "Importing file..."
+            val context = getApplication<Application>()
+            
             try {
-                val context = getApplication<Application>()
-                val file = java.io.File(context.getExternalFilesDir(null), LocalLLMService.MODEL_PATH)
+                // Try to get actual file size for progress
+                val totalSize = try { inputStream.available().toLong() } catch (e: Exception) { -1L }
+                
+                val file = LocalLLMService.getTargetModelFile(context)
+                // If the selected file is the same as existing, avoid overwriting with zero
+                file.parentFile?.mkdirs()
+                
+                LocalLLMService.reset()
+                
+                android.util.Log.d("RKAI", "Importing model to ${file.absolutePath}")
+                
                 val outputStream = java.io.FileOutputStream(file)
-                inputStream.copyTo(outputStream)
+                val buffer = ByteArray(256 * 1024) // Larger buffer
+                var bytesRead: Int
+                var totalRead = 0L
+                
+                while (true) {
+                    bytesRead = inputStream.read(buffer)
+                    if (bytesRead == -1) break
+                    
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    if (totalSize > 0) {
+                        modelDownloadProgress.value = totalRead.toFloat() / totalSize.toFloat()
+                    }
+                }
+                
+                outputStream.flush()
+                try { outputStream.fd.sync() } catch (e: Exception) {}
                 outputStream.close()
                 inputStream.close()
                 
                 withContext(Dispatchers.Main) {
-                    LocalLLMService.initialize(context)
-                    isLocalAiAvailable.value = LocalLLMService.isModelAvailable(context)
+                    Toast.makeText(context, "Model copied ($totalRead bytes). Initializing Engine...", Toast.LENGTH_SHORT).show()
+                }
+
+                // Wait a bit for OS to settle the file
+                delay(1000)
+
+                // Initialize engine
+                LocalLLMService.initialize(context)
+                
+                withContext(Dispatchers.Main) {
+                    val ready = LocalLLMService.isEngineReady()
+                    isLocalAiAvailable.value = ready
                     isImportingModel.value = false
-                    Toast.makeText(context, "Model imported successfully!", Toast.LENGTH_SHORT).show()
+                    modelDownloadProgress.value = null
+                    
+                    if (ready) {
+                        Toast.makeText(context, "Model Ready! SYSTEM ONLINE.", Toast.LENGTH_SHORT).show()
+                        localAiError.value = null
+                    } else {
+                        val error = LocalLLMService.getLastError() ?: "Engine initialization failed."
+                        localAiError.value = error
+                        android.util.Log.e("RKAI", "Engine Error after import: $error")
+                        Toast.makeText(context, "Engine Error: $error. Cleaning up...", Toast.LENGTH_LONG).show()
+                        // Delete corrupted/invalid model to save space
+                        file.delete()
+                    }
                 }
             } catch (e: Exception) {
+                android.util.Log.e("RKAI", "Import Failed", e)
+                // Cleanup partial file on error
+                try {
+                    LocalLLMService.getModelFile(context).delete()
+                } catch (de: Exception) {}
+
                 withContext(Dispatchers.Main) {
                     isImportingModel.value = false
-                    Toast.makeText(getApplication(), "Failed to import model: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    modelDownloadProgress.value = null
+                    Toast.makeText(context, "Import Failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -2029,60 +2144,108 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun downloadOfflineModel() {
         val context = getApplication<Application>()
+        
+        // Delete existing file before downloading new one
+        val existingFile = LocalLLMService.getModelFile(context)
+        if (existingFile.exists()) {
+            existingFile.delete()
+        }
+        LocalLLMService.reset()
+
+        val extDir = context.getExternalFilesDir(null)
+        val freeSpace = extDir?.freeSpace ?: 0L
+        if (freeSpace < 1500 * 1024 * 1024L) {
+            Toast.makeText(context, "Insufficient storage. Need at least 1.5GB free.", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
         
         val request = android.app.DownloadManager.Request(android.net.Uri.parse(LocalLLMService.MODEL_URL))
-            .setTitle("Downloading RK Offline AI Model")
-            .setDescription("Qwen 2.5 1.5B Model (1.6GB) - Please wait...")
+            .setTitle("Downloading RK AI Engine (Gemma)")
+            .setDescription("Initializing systems... Please keep app open.")
             .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(context, null, LocalLLMService.MODEL_PATH)
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
-            .setAllowedNetworkTypes(android.app.DownloadManager.Request.NETWORK_WIFI or android.app.DownloadManager.Request.NETWORK_MOBILE)
+            .addRequestHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         
-        val downloadId = downloadManager.enqueue(request)
-        
-        viewModelScope.launch(Dispatchers.IO) {
-            var downloading = true
-            while (downloading) {
-                val query = android.app.DownloadManager.Query().setFilterById(downloadId)
-                val cursor = downloadManager.query(query)
-                if (cursor.moveToFirst()) {
-                    val statusIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_STATUS)
-                    val bytesDownloadedIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-                    val bytesTotalIdx = cursor.getColumnIndex(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+        try {
+            val downloadId = downloadManager.enqueue(request)
+            Toast.makeText(context, "Download started! System nominal.", Toast.LENGTH_SHORT).show()
+            
+            viewModelScope.launch(Dispatchers.IO) {
+                var downloading = true
+                while (downloading) {
+                    val query = android.app.DownloadManager.Query().setFilterById(downloadId)
+                    val cursor = downloadManager.query(query)
+                    if (cursor != null && cursor.moveToFirst()) {
+                        val status = try {
+                            cursor.getInt(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_STATUS))
+                        } catch (e: Exception) { -1 }
 
-                    val status = if (statusIdx != -1) cursor.getInt(statusIdx) else -1
-                    val bytesDownloaded = if (bytesDownloadedIdx != -1) cursor.getInt(bytesDownloadedIdx) else 0
-                    val bytesTotal = if (bytesTotalIdx != -1) cursor.getInt(bytesTotalIdx) else 0
-                    
-                    if (status == android.app.DownloadManager.STATUS_SUCCESSFUL) {
-                        downloading = false
-                        modelDownloadProgress.value = 1f
-                        withContext(Dispatchers.Main) {
-                            LocalLLMService.initialize(context)
-                            isLocalAiAvailable.value = LocalLLMService.isModelAvailable(context)
-                            if (isLocalAiAvailable.value) {
-                                Toast.makeText(context, "Model setup successful!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Setup failed! Model file not found.", Toast.LENGTH_LONG).show()
+                        when (status) {
+                            android.app.DownloadManager.STATUS_SUCCESSFUL -> {
+                                downloading = false
+                                modelDownloadProgress.value = 1f
+                                localAiError.value = "Initializing engine..."
+                                delay(2000) // Wait for file system
+                                LocalLLMService.initialize(context)
+                                withContext(Dispatchers.Main) {
+                                    val ready = LocalLLMService.isEngineReady()
+                                    isLocalAiAvailable.value = ready
+                                    localAiError.value = LocalLLMService.getLastError()
+                                    modelDownloadProgress.value = null
+                                    if (ready) {
+                                        Toast.makeText(context, "RK Engine Online! System Nominal.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val err = LocalLLMService.getLastError() ?: "Initialization failed"
+                                        Toast.makeText(context, "Engine error: $err", Toast.LENGTH_LONG).show()
+                                        // Cleanup on failure
+                                        LocalLLMService.getModelFile(context).delete()
+                                    }
+                                }
+                            }
+                            android.app.DownloadManager.STATUS_FAILED -> {
+                                val reason = try {
+                                    cursor.getInt(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_REASON))
+                                } catch (e: Exception) { 0 }
+                                downloading = false
+                                modelDownloadProgress.value = null
+                                
+                                // Cleanup failed placeholder file to save space
+                                try {
+                                    LocalLLMService.getModelFile(context).delete()
+                                } catch (e: Exception) {}
+
+                                withContext(Dispatchers.Main) {
+                                    val msg = when (reason) {
+                                        android.app.DownloadManager.ERROR_INSUFFICIENT_SPACE -> "No storage space"
+                                        android.app.DownloadManager.ERROR_HTTP_DATA_ERROR -> "Network error"
+                                        401 -> "Auth Failed (Error 401). Use 'SELECT FILE' with manual download."
+                                        403 -> "Forbidden (Error 403). Use 'SELECT FILE' with manual download."
+                                        android.app.DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Access denied (Error $reason)"
+                                        else -> "Error code: $reason"
+                                    }
+                                    localAiError.value = "Download failed: $msg"
+                                    Toast.makeText(context, "Download failed: $msg", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            android.app.DownloadManager.STATUS_RUNNING -> {
+                                val bytesDownloaded = cursor.getLong(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                                val bytesTotal = cursor.getLong(cursor.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                                if (bytesTotal > 0) {
+                                    modelDownloadProgress.value = bytesDownloaded.toFloat() / bytesTotal.toFloat()
+                                }
                             }
                         }
-                    } else if (status == android.app.DownloadManager.STATUS_FAILED) {
-                        downloading = false
-                        modelDownloadProgress.value = null
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "Download failed!", Toast.LENGTH_LONG).show()
-                        }
-                    } else {
-                        if (bytesTotal > 0) {
-                            modelDownloadProgress.value = bytesDownloaded.toFloat() / bytesTotal.toFloat()
-                        }
                     }
+                    cursor?.close()
+                    delay(1200)
                 }
-                cursor.close()
-                kotlinx.coroutines.delay(1000)
             }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Download system error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

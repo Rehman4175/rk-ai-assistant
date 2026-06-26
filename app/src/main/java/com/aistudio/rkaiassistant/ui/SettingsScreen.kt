@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Download
@@ -406,14 +407,33 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         fontFamily = FontFamily.Monospace
                     )
 
+                    val isDriveBackingUp by viewModel.isDriveBackingUp.collectAsState()
+                    val driveBackupStatus by viewModel.lastDriveBackupStatus.collectAsState()
+
                     Button(
                         onClick = { viewModel.backupToDrive() },
+                        enabled = !isDriveBackingUp,
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.CloudDone, null, tint = Color.Black)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("BACKUP TO MY GOOGLE DRIVE", color = Color.Black, fontWeight = FontWeight.Bold)
+                        if (isDriveBackingUp) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.CloudDone, null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("BACKUP TO MY GOOGLE DRIVE", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (driveBackupStatus != null) {
+                        Text(
+                            text = driveBackupStatus ?: "",
+                            color = if (driveBackupStatus?.contains("✅") == true) NeonGreen else if (driveBackupStatus?.contains("❌") == true) Color.Red else Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
                     }
 
                     Button(
@@ -787,11 +807,16 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
 
                     // Offline LLM Status
                     val isLocalAiAvailable by viewModel.isLocalAiAvailable.collectAsState()
+                    val localAiError by viewModel.localAiError.collectAsState()
                     val isImportingModel by viewModel.isImportingModel.collectAsState()
                     val downloadProgress by viewModel.modelDownloadProgress.collectAsState()
 
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isLocalAiAvailable) NeonGreen.copy(alpha = 0.1f) else Color.Transparent)
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -803,34 +828,58 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Offline LLM Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text(
-                                if (isLocalAiAvailable) "Model Loaded (Qwen 2.5)" 
-                                else if (isImportingModel) "Importing Model File..."
-                                else if (downloadProgress != null) "Downloading Model... ${(downloadProgress!! * 100).toInt()}%" 
-                                else "Model Missing: Required for Offline AI",
-                                color = if (isLocalAiAvailable) NeonGreen else if (downloadProgress != null || isImportingModel) NeonCyan else SoftTextGray,
-                                fontSize = 11.sp
+                                text = if (isLocalAiAvailable) "SYSTEM ONLINE: Model Loaded" 
+                                       else if (isImportingModel) "Importing Model File..."
+                                       else if (downloadProgress != null) "Downloading Model... ${(downloadProgress!! * 100).toInt()}%" 
+                                       else localAiError ?: "Model Missing: Required for Offline AI",
+                                color = if (isLocalAiAvailable) NeonGreen else if (downloadProgress != null || isImportingModel) NeonCyan else if (localAiError != null) Color.Red else SoftTextGray,
+                                fontSize = 11.sp,
+                                fontWeight = if (isLocalAiAvailable) FontWeight.ExtraBold else FontWeight.Normal
                             )
                         }
                         
                         if (!isLocalAiAvailable && downloadProgress == null && !isImportingModel) {
-                            Row {
-                                Button(
-                                    onClick = { viewModel.downloadOfflineModel() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text("DOWNLOAD", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Column {
+                                Row {
+                                    Button(
+                                        onClick = { viewModel.downloadOfflineModel() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("DOWNLOAD", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = { modelPickerLauncher.launch("*/*") },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp).border(1.dp, BorderColor, RoundedCornerShape(20.dp))
+                                    ) {
+                                        Text("SELECT FILE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = { modelPickerLauncher.launch("*/*") },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF141624)),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp).border(1.dp, BorderColor, RoundedCornerShape(20.dp))
-                                ) {
-                                    Text("SELECT FILE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                
+                                if (localAiError?.contains("401") == true || localAiError?.contains("403") == true) {
+                                    TextButton(
+                                        onClick = {
+                                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            val clip = android.content.ClipData.newPlainText("Model URL", LocalLLMService.MODEL_URL)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Link Copied! Browser me open karein.", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    ) {
+                                        Text("COPY DIRECT DOWNLOAD LINK", color = NeonCyan, fontSize = 10.sp)
+                                    }
                                 }
+
+                                Text(
+                                    "Tip: MediaPipe compatible (.bin) model select karein (e.g. Qwen 2.5 / Gemma). Agar download fail ho to Link copy karke browser se download karein.",
+                                    color = Color.Yellow.copy(alpha = 0.7f),
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
                             }
                         } else if (!isLocalAiAvailable && !isImportingModel) {
                              // If model exists but is corrupted (hence isLocalAiAvailable is false)
@@ -870,7 +919,17 @@ fun SettingsScreen(viewModel: AssistantViewModel) {
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("https://script.google.com/macros/s/.../exec", fontSize = 11.sp) },
-                        isError = !isUrlValid || isSpreadsheetUrl
+                        isError = !isUrlValid || isSpreadsheetUrl,
+                        trailingIcon = {
+                            if (scriptUrlInput.isNotBlank()) {
+                                IconButton(onClick = {
+                                    scriptUrlInput = ""
+                                    viewModel.prefs.setGoogleScriptUrl("")
+                                }) {
+                                    Icon(Icons.Default.Close, "Remove URL", tint = Color.Red.copy(alpha = 0.7f))
+                                }
+                            }
+                        }
                     )
 
                     if (isSpreadsheetUrl) {

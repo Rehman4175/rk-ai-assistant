@@ -8,6 +8,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isDeleted = 0 ORDER BY isCompleted ASC, priority DESC, dueDate ASC")
     fun getAllTasks(): Flow<List<Task>>
 
+    @Query("SELECT * FROM tasks ORDER BY timestamp DESC")
+    fun getAllTasksTotal(): Flow<List<Task>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: Task)
 
@@ -88,6 +91,9 @@ interface WaterLogDao {
 interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE isDeleted = 0 ORDER BY dateString DESC, timestamp DESC")
     fun getAllExpenses(): Flow<List<Expense>>
+
+    @Query("SELECT * FROM expenses ORDER BY timestamp DESC")
+    fun getAllExpensesTotal(): Flow<List<Expense>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpense(expense: Expense)

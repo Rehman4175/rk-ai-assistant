@@ -85,7 +85,7 @@ class SecurePrefHelper(context: Context) {
     }
 
     fun getGoogleScriptUrl(): String {
-        return prefs.getString("google_script_url", "") ?: ""
+        return prefs.getString("google_script_url", "https://script.google.com/macros/s/AKfycbyYhCMxFGXlHV5sOcWuXLbvcxpOcT0mN_2apbzeMP1CGbXKoxn47cNRlsEcyK6oDTcCnQ/exec") ?: "https://script.google.com/macros/s/AKfycbyYhCMxFGXlHV5sOcWuXLbvcxpOcT0mN_2apbzeMP1CGbXKoxn47cNRlsEcyK6oDTcCnQ/exec"
     }
 
     fun setGoogleScriptUrl(url: String) {
@@ -152,6 +152,22 @@ class SecurePrefHelper(context: Context) {
 
     fun getGeminiApiKey(): String {
         return prefs.getString("GEMINI_API_KEY", "") ?: ""
+    }
+
+    fun saveLastSyncStatus(status: String) {
+        prefs.edit().putString("last_sync_status", status).apply()
+    }
+
+    fun getLastSyncStatus(): String {
+        return prefs.getString("last_sync_status", "Never synced") ?: "Never synced"
+    }
+
+    fun saveLastDriveBackupStatus(status: String) {
+        prefs.edit().putString("last_drive_backup_status", status).apply()
+    }
+
+    fun getLastDriveBackupStatus(): String {
+        return prefs.getString("last_drive_backup_status", "Never backed up") ?: "Never backed up"
     }
 
     fun getDbPassphrase(): ByteArray? {

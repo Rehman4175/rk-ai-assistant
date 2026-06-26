@@ -8,12 +8,12 @@ plugins {
 
 android {
   namespace = "com.aistudio.rkaiassistant"
-  compileSdk = 36
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.rkaiassistant.fptwyz"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 35
     versionCode = 3
     versionName = "1.1"
 
